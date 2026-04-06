@@ -39,7 +39,7 @@
     "step": {
       "init": {
         "data": {
-          "update_interval": "Intervalle de mise a jour (secondes)"
+          "update_interval": "Intervalle de mise a jour (minutes)"
         }
       }
     }
@@ -116,7 +116,8 @@
     },
     "button": {
       "reset_ph_container": { "name": "Reinitialiser bidon pH-" },
-      "reset_chlorine_container": { "name": "Reinitialiser bidon chlore" }
+      "reset_chlorine_container": { "name": "Reinitialiser bidon chlore" },
+      "refresh": { "name": "Rafraichir" }
     }
   }
 }

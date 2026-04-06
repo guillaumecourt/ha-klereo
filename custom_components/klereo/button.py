@@ -64,8 +64,11 @@ async def async_setup_entry(
                 KlereoContainerResetButton(coordinator, device, description)
             )
 
+        # Refresh button per device
+        entities.append(KlereoRefreshButton(coordinator, device))
+
     if entities:
-        _LOGGER.info("Adding %d Klereo container reset buttons", len(entities))
+        _LOGGER.info("Adding %d Klereo buttons", len(entities))
         async_add_entities(entities)
 
 
@@ -127,4 +130,20 @@ class KlereoContainerResetButton(KlereoEntity, ButtonEntity):
             },
         )
 
+        await self.coordinator.async_request_refresh()
+
+
+class KlereoRefreshButton(KlereoEntity, ButtonEntity):
+    """Button to manually refresh data from the Klereo API."""
+
+    _attr_entity_category = EntityCategory.CONFIG
+    _attr_translation_key = "refresh"
+
+    def __init__(self, coordinator, device: dict):
+        super().__init__(coordinator, device)
+        self._attr_unique_id = f"{self._device_id}_refresh"
+
+    async def async_press(self) -> None:
+        """Handle button press — refresh data."""
+        _LOGGER.info("Manual refresh triggered for device %s", self._device_id)
         await self.coordinator.async_request_refresh()

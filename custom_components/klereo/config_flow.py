@@ -177,8 +177,8 @@ class KlereoOptionsFlowHandler(config_entries.OptionsFlow):
                 {
                     vol.Required(
                         "update_interval",
-                        default=self.config_entry.options.get("update_interval", 900),
-                    ): vol.All(int, vol.Range(min=60))
+                        default=self.config_entry.options.get("update_interval", 15),
+                    ): vol.All(int, vol.Range(min=1))
                 }
             ),
         )

@@ -39,7 +39,7 @@
     "step": {
       "init": {
         "data": {
-          "update_interval": "Update interval (seconds)"
+          "update_interval": "Update interval (minutes)"
         }
       }
     }
@@ -116,7 +116,8 @@
     },
     "button": {
       "reset_ph_container": { "name": "Reset pH- Container" },
-      "reset_chlorine_container": { "name": "Reset Chlorine Container" }
+      "reset_chlorine_container": { "name": "Reset Chlorine Container" },
+      "refresh": { "name": "Refresh" }
     }
   }
 }

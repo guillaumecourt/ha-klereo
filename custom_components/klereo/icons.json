@@ -71,7 +71,8 @@
     },
     "button": {
       "reset_ph_container": { "default": "mdi:delete-restore" },
-      "reset_chlorine_container": { "default": "mdi:delete-restore" }
+      "reset_chlorine_container": { "default": "mdi:delete-restore" },
+      "refresh": { "default": "mdi:refresh" }
     }
   }
 }

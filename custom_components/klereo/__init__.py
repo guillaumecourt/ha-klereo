@@ -54,7 +54,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     pool_id = entry.data.get(CONF_POOL_ID)
     api = KlereoApi(hass, entry.data["username"], entry.data["password"], pool_id=pool_id)
-    update_interval = timedelta(seconds=entry.options.get("update_interval", 900))
+    raw_interval = entry.options.get("update_interval", 15)
+    # Migration: old values were in seconds (>= 60), new values are in minutes
+    if raw_interval >= 60:
+        raw_interval = raw_interval // 60
+    update_interval = timedelta(minutes=raw_interval)
 
     coordinator = KlereoDataUpdateCoordinator(
         hass=hass,
@@ -96,6 +100,6 @@ async def async_update_options(hass: HomeAssistant, entry: ConfigEntry) -> None:
     _LOGGER.debug("Updating Klereo options for entry: %s", entry.entry_id)
     coordinator = getattr(entry, "runtime_data", None)
     if coordinator:
-        new_interval_seconds = entry.options.get("update_interval", 900)
-        coordinator.update_interval = timedelta(seconds=new_interval_seconds)
-        _LOGGER.debug("Coordinator update interval set to %s seconds", new_interval_seconds)
+        new_interval_minutes = entry.options.get("update_interval", 15)
+        coordinator.update_interval = timedelta(minutes=new_interval_minutes)
+        _LOGGER.debug("Coordinator update interval set to %s minutes", new_interval_minutes)
