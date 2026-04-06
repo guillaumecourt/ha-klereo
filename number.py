@@ -82,7 +82,6 @@ class KlereoSetpointNumber(KlereoEntity, NumberEntity):
         self._param_key = param_key
         self._setpoint_def = setpoint_def
 
-        self._attr_name = setpoint_def["name"]
         self._attr_translation_key = setpoint_def["id_key"]
         self._attr_unique_id = f"{self._device_id}_{setpoint_def['id_key']}"
         self._attr_native_unit_of_measurement = setpoint_def.get("unit")
@@ -102,7 +101,11 @@ class KlereoSetpointNumber(KlereoEntity, NumberEntity):
         raw = params.get(self._param_key)
         if raw is not None:
             try:
-                self._attr_native_value = float(raw)
+                value = float(raw)
+                if value <= -1000:
+                    self._attr_native_value = None
+                else:
+                    self._attr_native_value = round(value, 1)
             except (ValueError, TypeError):
                 self._attr_native_value = None
         else:
@@ -130,7 +133,6 @@ class KlereoPumpSpeedNumber(KlereoEntity, NumberEntity):
         # Find filtration output index (default 1)
         self._filtration_index = 1
 
-        self._attr_name = "Pump Speed"
         self._attr_translation_key = "pump_speed"
         self._attr_unique_id = f"{self._device_id}_pump_speed"
         self._attr_native_min_value = 0

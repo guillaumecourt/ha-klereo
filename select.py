@@ -105,7 +105,6 @@ class KlereoFiltrationSelect(KlereoEntity, SelectEntity):
         super().__init__(coordinator, device)
         self.api = api
 
-        self._attr_name = "Filtration"
         self._attr_translation_key = "filtration_mode"
         self._attr_unique_id = f"{self._device_id}_filtration_mode_out{FILTRATION_OUTPUT_INDEX}"
         self._attr_options = FILTRATION_SELECT_OPTIONS
@@ -181,7 +180,6 @@ class KlereoLightingSelect(KlereoEntity, SelectEntity):
         super().__init__(coordinator, device)
         self.api = api
 
-        self._attr_name = "Eclairage"
         self._attr_translation_key = "lighting_mode"
         self._attr_unique_id = f"{self._device_id}_lighting_mode_out{LIGHTING_OUTPUT_INDEX}"
         self._attr_options = LIGHTING_SELECT_OPTIONS
@@ -297,7 +295,6 @@ class KlereoHeatingModeSelect(KlereoEntity, SelectEntity):
         super().__init__(coordinator, device)
         self.api = api
 
-        self._attr_name = "Heating Mode"
         self._attr_translation_key = "heating_mode"
         self._attr_unique_id = f"{self._device_id}_heating_mode"
         self._attr_options = HEATING_MODE_OPTIONS

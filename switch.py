@@ -59,9 +59,6 @@ class KlereoOutputSwitch(KlereoEntity, SwitchEntity):
         super().__init__(coordinator, device)
         self.api = api
         self._output_index = output_index
-        output_name = OUTPUT_NAMES.get(output_index, f"Output {output_index}")
-
-        self._attr_name = output_name
         self._attr_translation_key = OUTPUT_TRANSLATION_KEYS.get(output_index, f"output_{output_index}")
         self._attr_unique_id = f"{self._device_id}_switch_out{output_index}"
 

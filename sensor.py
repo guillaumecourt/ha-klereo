@@ -104,7 +104,6 @@ class KlereoProbeSensor(KlereoEntity, SensorEntity):
         probe_type = probe.get("type")
         probe_details = PROBE_TYPES[probe_type]
 
-        self._attr_name = probe_details["name"]
         self._attr_translation_key = probe_details["id_key"]
         self._attr_unique_id = f"{self._device_id}_{probe_details['id_key']}_{self._probe_index}"
         self._attr_native_unit_of_measurement = probe_details.get("unit")
@@ -154,7 +153,6 @@ class KlereoCalculatedSensor(KlereoEntity, SensorEntity):
         super().__init__(coordinator, device)
         self._sensor_def = sensor_def
 
-        self._attr_name = sensor_def["name"]
         self._attr_translation_key = sensor_def["id_key"]
         self._attr_unique_id = f"{self._device_id}_{sensor_def['id_key']}"
         self._attr_native_unit_of_measurement = sensor_def.get("unit")
@@ -222,7 +220,6 @@ class KlereoStatusSensor(KlereoEntity, SensorEntity):
         self._status_def = status_def
         self._value_map = status_def.get("value_map", {})
 
-        self._attr_name = status_def["name"]
         self._attr_translation_key = status_def["id_key"]
         self._attr_unique_id = f"{self._device_id}_{status_def['id_key']}"
 
@@ -251,7 +248,6 @@ class KlereoAlertCountSensor(KlereoEntity, SensorEntity):
 
     def __init__(self, coordinator, device: dict) -> None:
         super().__init__(coordinator, device)
-        self._attr_name = "Alerts"
         self._attr_translation_key = "alert_count"
         self._attr_unique_id = f"{self._device_id}_alert_count"
         self._attr_state_class = SensorStateClass.MEASUREMENT
