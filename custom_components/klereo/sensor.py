@@ -339,6 +339,7 @@ class KlereoContainerDaysRemainingSensor(KlereoEntity, SensorEntity):
     def __init__(self, coordinator, device: dict, entry, ct_key: str, ct_def: dict) -> None:
         super().__init__(coordinator, device)
         self._entry = entry
+        self._ct_key = ct_key
         self._ct_def = ct_def
 
         self._attr_translation_key = f"container_days_remaining_{ct_key}"
@@ -370,24 +371,36 @@ class KlereoContainerDaysRemainingSensor(KlereoEntity, SensorEntity):
             self._attr_native_value = 0
             return
 
-        # Long-term average from installDate
-        device_data = self._get_device_data()
-        install_ts = device_data.get("installDate") if device_data else None
-        avg_long_term = None
-        if install_ts:
-            try:
-                install_date = datetime.fromtimestamp(int(install_ts), tz=timezone.utc)
-                days_since = (datetime.now(tz=timezone.utc) - install_date).total_seconds() / 86400
-                if days_since > 1 and volume_total > 0:
-                    avg_long_term = volume_total / days_since
-            except (ValueError, TypeError, OSError):
-                pass
+        # 7-day sliding average from daily history
+        history_key = f"{self._ct_key}_daily_history"
+        history = options.get(history_key, [])
+        avg_7d = None
+        if len(history) >= 3:
+            volumes = [entry["volume"] for entry in history if "volume" in entry]
+            if volumes:
+                avg_7d = sum(volumes) / len(volumes)
 
-        # Weighted average: 70% today + 30% long-term
-        if volume_today and volume_today > 0 and avg_long_term and avg_long_term > 0:
-            weighted_avg = 0.7 * volume_today + 0.3 * avg_long_term
-        elif avg_long_term and avg_long_term > 0:
-            weighted_avg = avg_long_term
+        # Fallback: long-term average from installDate
+        avg_long_term = None
+        if avg_7d is None:
+            device_data = self._get_device_data()
+            install_ts = device_data.get("installDate") if device_data else None
+            if install_ts:
+                try:
+                    install_date = datetime.fromtimestamp(int(install_ts), tz=timezone.utc)
+                    days_since = (datetime.now(tz=timezone.utc) - install_date).total_seconds() / 86400
+                    if days_since > 1 and volume_total > 0:
+                        avg_long_term = volume_total / days_since
+                except (ValueError, TypeError, OSError):
+                    pass
+
+        baseline = avg_7d if avg_7d is not None else avg_long_term
+
+        # Weighted average: 70% today + 30% baseline
+        if volume_today and volume_today > 0 and baseline and baseline > 0:
+            weighted_avg = 0.7 * volume_today + 0.3 * baseline
+        elif baseline and baseline > 0:
+            weighted_avg = baseline
         elif volume_today and volume_today > 0:
             weighted_avg = volume_today
         else:

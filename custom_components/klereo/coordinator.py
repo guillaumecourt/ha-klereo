@@ -1,13 +1,13 @@
 """Data update coordinator for the Klereo integration."""
 import logging
-from datetime import timedelta
+from datetime import date, timedelta
 
 import aiohttp
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from .const import DOMAIN
+from .const import DOMAIN, CONTAINER_TRACKING
 from .api import KlereoApi
 
 _LOGGER = logging.getLogger(__name__)
@@ -43,6 +43,9 @@ class KlereoDataUpdateCoordinator(DataUpdateCoordinator):
                 if current_count > previous_count:
                     await self._notify_new_alerts(device, current_count - previous_count)
                 self._previous_alert_count[device_id] = current_count
+
+            # Record daily container volumes for 7-day sliding average
+            self._update_daily_history(data)
 
             return data
 
@@ -94,3 +97,47 @@ class KlereoDataUpdateCoordinator(DataUpdateCoordinator):
             "alert_count": alert_count,
             "new_alerts": new_count,
         })
+
+    def _update_daily_history(self, data: list) -> None:
+        """Record daily container consumption for 7-day sliding average."""
+        if not getattr(self, "config_entry", None):
+            return
+
+        today_str = date.today().isoformat()
+        new_options = {**self.config_entry.options}
+        changed = False
+
+        for device in data:
+            params = {**device.get("params", {})}
+            if isinstance(device.get("ExtraParams"), dict):
+                params.update(device["ExtraParams"])
+
+            for ct_key, ct_def in CONTAINER_TRACKING.items():
+                history_key = f"{ct_key}_daily_history"
+                history = list(self.config_entry.options.get(history_key, []))
+
+                # Compute today's volume
+                debit_raw = params.get(ct_def["debit_key"])
+                time_raw = params.get(ct_def["today_time_key"])
+                if debit_raw is None or time_raw is None:
+                    continue
+                try:
+                    volume_today = (float(debit_raw) / 36000.0) * float(time_raw)
+                except (ValueError, TypeError):
+                    continue
+
+                # Update or add today's entry
+                if history and history[-1].get("date") == today_str:
+                    history[-1]["volume"] = round(volume_today, 3)
+                else:
+                    history.append({"date": today_str, "volume": round(volume_today, 3)})
+
+                # Keep only last 7 days
+                history = history[-7:]
+                new_options[history_key] = history
+                changed = True
+
+        if changed:
+            self.hass.config_entries.async_update_entry(
+                self.config_entry, options=new_options
+            )
