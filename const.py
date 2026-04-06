@@ -2,7 +2,7 @@
 from homeassistant.const import Platform
 
 DOMAIN = "klereo"
-PLATFORMS = [Platform.SENSOR, Platform.SELECT, Platform.SWITCH, Platform.NUMBER]
+PLATFORMS = [Platform.SENSOR, Platform.SELECT, Platform.SWITCH, Platform.NUMBER, Platform.BUTTON]
 
 # --- Config flow constants ---
 CONF_POOL_ID = "pool_id"
@@ -170,7 +170,7 @@ CALCULATED_SENSORS = {
     "ph_volume_today": {
         "name": "pH Volume Today",
         "id_key": "ph_volume_today",
-        "unit": "mL",
+        "unit": "L",
         "icon": "mdi:flask-minus-outline",
         "state_class": "total_increasing",
         "formula": "debit_time",
@@ -181,13 +181,13 @@ CALCULATED_SENSORS = {
     "ph_volume_total": {
         "name": "pH Volume Total",
         "id_key": "ph_volume_total",
-        "unit": "mL",
+        "unit": "L",
         "icon": "mdi:flask-minus",
         "state_class": "total_increasing",
         "formula": "debit_time",
         "debit_key": "PHMinus_Debit",
         "time_key": "PHMinus_TotalTime",
-        "round_digits": 2,
+        "round_digits": 1,
     },
     "ph_max_daily_volume": {
         "name": "pH Max Daily Volume",
@@ -202,24 +202,24 @@ CALCULATED_SENSORS = {
     "chlorine_volume_today": {
         "name": "Chlorine Volume Today",
         "id_key": "chlorine_volume_today",
-        "unit": "mL",
+        "unit": "L",
         "icon": "mdi:flask-plus-outline",
         "state_class": "total_increasing",
         "formula": "debit_time",
         "debit_key": "Chlore_Debit",
-        "time_key": "ElectroChlore_TodayTime",
+        "time_key": "HybChl_TodayTime",
         "round_digits": 3,
     },
     "chlorine_volume_total": {
         "name": "Chlorine Volume Total",
         "id_key": "chlorine_volume_total",
-        "unit": "mL",
+        "unit": "L",
         "icon": "mdi:flask-plus",
         "state_class": "total_increasing",
         "formula": "debit_time",
         "debit_key": "Chlore_Debit",
-        "time_key": "ElectroChlore_TotalTime",
-        "round_digits": 2,
+        "time_key": "HybChl_TotalTime",
+        "round_digits": 1,
     },
     "filtration_today_time": {
         "name": "Filtration Time Today",
@@ -269,7 +269,7 @@ CALCULATED_SENSORS = {
         "state_class": "total_increasing",
         "device_class": "duration",
         "formula": "time_hours",
-        "time_key": "ElectroChlore_TodayTime",
+        "time_key": "HybChl_TodayTime",
     },
     "chlorine_run_total_time": {
         "name": "Chlorine Run Time Total",
@@ -279,7 +279,7 @@ CALCULATED_SENSORS = {
         "state_class": "total_increasing",
         "device_class": "duration",
         "formula": "time_hours",
-        "time_key": "ElectroChlore_TotalTime",
+        "time_key": "HybChl_TotalTime",
     },
     "electrolysis_gram_production": {
         "name": "Electrolysis Production",
@@ -314,6 +314,7 @@ STATUS_SENSORS = {
             0: "Stop",
             1: "Auto",
             2: "Manual",
+            8: "Hybrid",
         },
     },
     "pHMode": {
@@ -410,3 +411,33 @@ HEATING_MODE_TO_VALUE = {
 }
 HEATING_VALUE_TO_MODE = {v: k for k, v in HEATING_MODE_TO_VALUE.items()}
 HEATING_OUTPUT_INDEX = 6
+
+# --- Container tracking definitions (for reset buttons) ---
+CONTAINER_TRACKING = {
+    "ph_minus": {
+        "id_key": "reset_ph_container",
+        "debit_key": "PHMinus_Debit",
+        "total_time_key": "PHMinus_TotalTime",
+        "today_time_key": "PHMinus_TodayTime",
+        "reset_option": "ph_container_reset_at",
+        "reset_date_option": "ph_container_reset_date",
+        "capacity_option": "ph_container_capacity",
+        "capacity_default": 20.0,
+        "capacity_min": 1.0,
+        "capacity_max": 200.0,
+        "capacity_step": 0.5,
+    },
+    "chlorine": {
+        "id_key": "reset_chlorine_container",
+        "debit_key": "Chlore_Debit",
+        "total_time_key": "HybChl_TotalTime",
+        "today_time_key": "HybChl_TodayTime",
+        "reset_option": "chlorine_container_reset_at",
+        "reset_date_option": "chlorine_container_reset_date",
+        "capacity_option": "chlorine_container_capacity",
+        "capacity_default": 25.0,
+        "capacity_min": 1.0,
+        "capacity_max": 200.0,
+        "capacity_step": 0.5,
+    },
+}

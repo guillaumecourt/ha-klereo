@@ -7,11 +7,12 @@ from homeassistant.components.sensor import (
     SensorStateClass,
     SensorDeviceClass,
 )
+from homeassistant.const import UnitOfTemperature, UnitOfPressure
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import PROBE_TYPES, CALCULATED_SENSORS, STATUS_SENSORS
+from .const import PROBE_TYPES, CALCULATED_SENSORS, STATUS_SENSORS, CONTAINER_TRACKING
 from .entity import KlereoEntity
 
 _LOGGER = logging.getLogger(__name__)
@@ -51,9 +52,12 @@ async def async_setup_entry(
 
         # Calculated sensors
         if "params" in device and isinstance(device["params"], dict):
+            merged_params = {**device["params"]}
+            if isinstance(device.get("ExtraParams"), dict):
+                merged_params.update(device["ExtraParams"])
             for sensor_key, sensor_def in CALCULATED_SENSORS.items():
                 # Only add if the required params exist
-                if _calculated_sensor_has_data(device["params"], sensor_def):
+                if _calculated_sensor_has_data(merged_params, sensor_def):
                     sensors.append(KlereoCalculatedSensor(coordinator, device, sensor_key, sensor_def))
 
         # Status sensors
@@ -61,6 +65,11 @@ async def async_setup_entry(
             for param_key, status_def in STATUS_SENSORS.items():
                 if param_key in device["params"]:
                     sensors.append(KlereoStatusSensor(coordinator, device, param_key, status_def))
+
+        # Container estimation sensors
+        for ct_key, ct_def in CONTAINER_TRACKING.items():
+            sensors.append(KlereoContainerRemainingSensor(coordinator, device, entry, ct_key, ct_def))
+            sensors.append(KlereoContainerDaysRemainingSensor(coordinator, device, entry, ct_key, ct_def))
 
         # Alert sensors
         if "alerts" in device:
@@ -107,6 +116,10 @@ class KlereoProbeSensor(KlereoEntity, SensorEntity):
         device_class = probe_details.get("device_class")
         if device_class:
             self._attr_device_class = getattr(SensorDeviceClass, device_class.upper(), device_class)
+            if device_class == "temperature":
+                self._attr_suggested_unit_of_measurement = UnitOfTemperature.CELSIUS
+            elif device_class == "pressure":
+                self._attr_suggested_unit_of_measurement = UnitOfPressure.MBAR
 
         self._update_state()
 
@@ -260,3 +273,119 @@ class KlereoAlertCountSensor(KlereoEntity, SensorEntity):
     @property
     def extra_state_attributes(self) -> dict:
         return getattr(self, "_attr_extra_state_attributes", {})
+
+
+def _compute_volume(params: dict, debit_key: str, time_key: str) -> float | None:
+    """Compute volume in liters from debit and time params."""
+    debit_raw = params.get(debit_key)
+    time_raw = params.get(time_key)
+    if debit_raw is None or time_raw is None:
+        return None
+    try:
+        debit = float(debit_raw)
+        time_val = float(time_raw)
+        return (debit / 36000.0) * time_val if debit > 0 else 0.0
+    except (ValueError, TypeError):
+        return None
+
+
+class KlereoContainerRemainingSensor(KlereoEntity, SensorEntity):
+    """Sensor showing remaining volume in a container."""
+
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_native_unit_of_measurement = "L"
+
+    def __init__(self, coordinator, device: dict, entry, ct_key: str, ct_def: dict) -> None:
+        super().__init__(coordinator, device)
+        self._entry = entry
+        self._ct_def = ct_def
+
+        self._attr_translation_key = f"container_remaining_{ct_key}"
+        self._attr_unique_id = f"{self._device_id}_container_remaining_{ct_key}"
+        self._update_state()
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        self._update_state()
+        self.async_write_ha_state()
+
+    def _update_state(self) -> None:
+        params = self._get_params()
+        volume_total = _compute_volume(params, self._ct_def["debit_key"], self._ct_def["total_time_key"])
+        if volume_total is None:
+            self._attr_native_value = None
+            return
+
+        options = self._entry.options
+        capacity = float(options.get(self._ct_def["capacity_option"], self._ct_def["capacity_default"]))
+        reset_at = float(options.get(self._ct_def["reset_option"], 0))
+
+        consumed_since_reset = volume_total - reset_at
+        remaining = round(capacity - consumed_since_reset, 2)
+        self._attr_native_value = max(remaining, 0.0)
+
+
+class KlereoContainerDaysRemainingSensor(KlereoEntity, SensorEntity):
+    """Sensor estimating days until container needs replacement."""
+
+    _attr_native_unit_of_measurement = "d"
+
+    def __init__(self, coordinator, device: dict, entry, ct_key: str, ct_def: dict) -> None:
+        super().__init__(coordinator, device)
+        self._entry = entry
+        self._ct_def = ct_def
+
+        self._attr_translation_key = f"container_days_remaining_{ct_key}"
+        self._attr_unique_id = f"{self._device_id}_container_days_remaining_{ct_key}"
+        self._update_state()
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        self._update_state()
+        self.async_write_ha_state()
+
+    def _update_state(self) -> None:
+        from datetime import datetime, timezone
+
+        params = self._get_params()
+        volume_total = _compute_volume(params, self._ct_def["debit_key"], self._ct_def["total_time_key"])
+        volume_today = _compute_volume(params, self._ct_def["debit_key"], self._ct_def["today_time_key"])
+        if volume_total is None:
+            self._attr_native_value = None
+            return
+
+        # Remaining volume
+        options = self._entry.options
+        capacity = float(options.get(self._ct_def["capacity_option"], self._ct_def["capacity_default"]))
+        reset_at = float(options.get(self._ct_def["reset_option"], 0))
+        remaining = capacity - (volume_total - reset_at)
+
+        if remaining <= 0:
+            self._attr_native_value = 0
+            return
+
+        # Long-term average from installDate
+        device_data = self._get_device_data()
+        install_ts = device_data.get("installDate") if device_data else None
+        avg_long_term = None
+        if install_ts:
+            try:
+                install_date = datetime.fromtimestamp(int(install_ts), tz=timezone.utc)
+                days_since = (datetime.now(tz=timezone.utc) - install_date).total_seconds() / 86400
+                if days_since > 1 and volume_total > 0:
+                    avg_long_term = volume_total / days_since
+            except (ValueError, TypeError, OSError):
+                pass
+
+        # Weighted average: 70% today + 30% long-term
+        if volume_today and volume_today > 0 and avg_long_term and avg_long_term > 0:
+            weighted_avg = 0.7 * volume_today + 0.3 * avg_long_term
+        elif avg_long_term and avg_long_term > 0:
+            weighted_avg = avg_long_term
+        elif volume_today and volume_today > 0:
+            weighted_avg = volume_today
+        else:
+            self._attr_native_value = None
+            return
+
+        self._attr_native_value = round(remaining / weighted_avg, 1)

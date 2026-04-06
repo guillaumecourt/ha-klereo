@@ -76,7 +76,11 @@
       "treatment_mode": { "name": "Treatment Mode" },
       "ph_mode": { "name": "pH Mode" },
       "heater_mode": { "name": "Heater Mode" },
-      "alert_count": { "name": "Alerts" }
+      "alert_count": { "name": "Alerts" },
+      "container_remaining_ph_minus": { "name": "pH- Container Remaining" },
+      "container_remaining_chlorine": { "name": "Chlorine Container Remaining" },
+      "container_days_remaining_ph_minus": { "name": "pH- Container Days Left" },
+      "container_days_remaining_chlorine": { "name": "Chlorine Container Days Left" }
     },
     "select": {
       "filtration_mode": { "name": "Filtration" },
@@ -106,7 +110,13 @@
       "setpoint_ph": { "name": "pH Setpoint" },
       "setpoint_redox": { "name": "Redox Setpoint" },
       "setpoint_chlorine": { "name": "Chlorine Setpoint" },
-      "pump_speed": { "name": "Pump Speed" }
+      "pump_speed": { "name": "Pump Speed" },
+      "capacity_ph_minus": { "name": "pH- Container Capacity" },
+      "capacity_chlorine": { "name": "Chlorine Container Capacity" }
+    },
+    "button": {
+      "reset_ph_container": { "name": "Reset pH- Container" },
+      "reset_chlorine_container": { "name": "Reset Chlorine Container" }
     }
   }
 }

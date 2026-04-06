@@ -5,8 +5,8 @@ from datetime import datetime
 
 from homeassistant.components.button import ButtonEntity, ButtonEntityDescription
 from homeassistant.const import EntityCategory
-from homeassistant.core import HomeAssistant
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import CONTAINER_TRACKING
@@ -61,7 +61,7 @@ async def async_setup_entry(
 
         for description in BUTTON_DESCRIPTIONS:
             entities.append(
-                KlereoContainerResetButton(coordinator, device, entry, hass, description)
+                KlereoContainerResetButton(coordinator, device, description)
             )
 
     if entities:
@@ -70,7 +70,7 @@ async def async_setup_entry(
 
 
 def _compute_current_total(params: dict, debit_key: str, time_key: str) -> float:
-    """Compute cumulative volume in mL from API params."""
+    """Compute cumulative volume in liters from API params."""
     try:
         debit = float(params.get(debit_key, 0))
         time_s = float(params.get(time_key, 0))
@@ -84,47 +84,45 @@ class KlereoContainerResetButton(KlereoEntity, ButtonEntity):
 
     entity_description: KlereoButtonDescription
 
-    def __init__(self, coordinator, device, entry, hass, description: KlereoButtonDescription):
+    def __init__(self, coordinator, device, description: KlereoButtonDescription):
         super().__init__(coordinator, device)
         self.entity_description = description
-        self._entry = entry
-        self._hass = hass
         self._attr_unique_id = f"{self._device_id}_{description.key}"
 
     async def async_press(self) -> None:
         """Handle button press — reset container tracking."""
-        device_data = self._get_device_data()
-        if not device_data:
+        params = self._get_params()
+        if not params:
             _LOGGER.warning("No device data available for container reset")
             return
 
-        params = device_data.get("params", {})
         current_total = _compute_current_total(
             params,
             self.entity_description.debit_key,
             self.entity_description.total_time_key,
         )
 
+        entry = self.coordinator.config_entry
         new_options = {
-            **self._entry.options,
+            **entry.options,
             self.entity_description.reset_option: current_total,
             self.entity_description.reset_date_option: datetime.now().isoformat(),
         }
-        self._hass.config_entries.async_update_entry(self._entry, options=new_options)
+        self.hass.config_entries.async_update_entry(entry, options=new_options)
 
         container_key = self.entity_description.container_key
         _LOGGER.info(
-            "Container %s reset. Current total: %.1f mL",
+            "Container %s reset. Current total: %.1f L",
             container_key,
             current_total,
         )
 
-        await self._hass.services.async_call(
+        await self.hass.services.async_call(
             "persistent_notification",
             "create",
             {
                 "title": "Klereo",
-                "message": f"Bidon {container_key} réinitialisé. Total enregistré : {current_total:.0f} mL",
+                "message": f"Bidon {container_key} réinitialisé. Total enregistré : {current_total:.1f} L",
                 "notification_id": f"klereo_{container_key}_reset",
             },
         )

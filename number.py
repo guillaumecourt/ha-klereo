@@ -3,12 +3,14 @@ import logging
 from typing import Any
 
 from homeassistant.components.number import NumberEntity, NumberMode
+from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import (
     SETPOINT_DEFINITIONS,
+    CONTAINER_TRACKING,
     OUTPUT_MODE_MANUAL,
 )
 from .entity import KlereoEntity
@@ -45,6 +47,12 @@ async def async_setup_entry(
         for param_key, setpoint_def in SETPOINT_DEFINITIONS.items():
             if param_key in params:
                 numbers.append(KlereoSetpointNumber(coordinator, api, device, param_key, setpoint_def))
+
+        # Container capacity numbers
+        for ct_key, ct_def in CONTAINER_TRACKING.items():
+            numbers.append(
+                KlereoContainerCapacityNumber(coordinator, device, ct_key, ct_def)
+            )
 
         # Variable speed pump
         pump_max_speed = params.get("PumpMaxSpeed")
@@ -163,3 +171,49 @@ class KlereoPumpSpeedNumber(KlereoEntity, NumberEntity):
             await self.coordinator.async_request_refresh()
         else:
             _LOGGER.error("Failed to set pump speed to %d", speed)
+
+
+class KlereoContainerCapacityNumber(KlereoEntity, NumberEntity):
+    """Container capacity number entity stored in config entry options."""
+
+    _attr_mode = NumberMode.BOX
+    _attr_entity_category = EntityCategory.CONFIG
+
+    def __init__(self, coordinator, device: dict, container_key: str, ct_def: dict) -> None:
+        super().__init__(coordinator, device)
+        self._container_key = container_key
+        self._capacity_option = ct_def["capacity_option"]
+        self._capacity_default = ct_def["capacity_default"]
+
+        self._attr_translation_key = f"capacity_{container_key}"
+        self._attr_unique_id = f"{self._device_id}_capacity_{container_key}"
+        self._attr_native_unit_of_measurement = "L"
+        self._attr_native_min_value = ct_def.get("capacity_min", 1.0)
+        self._attr_native_max_value = ct_def.get("capacity_max", 200.0)
+        self._attr_native_step = ct_def.get("capacity_step", 0.5)
+
+        self._update_state()
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        self._update_state()
+        self.async_write_ha_state()
+
+    def _update_state(self) -> None:
+        entry = self.coordinator.config_entry
+        raw = entry.options.get(self._capacity_option)
+        if raw is not None:
+            try:
+                self._attr_native_value = float(raw)
+            except (ValueError, TypeError):
+                self._attr_native_value = self._capacity_default
+        else:
+            self._attr_native_value = self._capacity_default
+
+    async def async_set_native_value(self, value: float) -> None:
+        """Set capacity in config entry options."""
+        entry = self.coordinator.config_entry
+        new_options = {**entry.options, self._capacity_option: value}
+        self.hass.config_entries.async_update_entry(entry, options=new_options)
+        self._attr_native_value = value
+        self.async_write_ha_state()

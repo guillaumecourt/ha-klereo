@@ -45,8 +45,13 @@ class KlereoEntity(CoordinatorEntity):
         )
 
     def _get_params(self) -> Dict[str, Any]:
-        """Get the params dict from device data."""
+        """Get merged params + ExtraParams dict from device data."""
         device_data = self._get_device_data()
-        if device_data and isinstance(device_data.get("params"), dict):
-            return device_data["params"]
-        return {}
+        if not device_data:
+            return {}
+        params = {}
+        if isinstance(device_data.get("params"), dict):
+            params.update(device_data["params"])
+        if isinstance(device_data.get("ExtraParams"), dict):
+            params.update(device_data["ExtraParams"])
+        return params

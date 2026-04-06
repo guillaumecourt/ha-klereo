@@ -76,7 +76,11 @@
       "treatment_mode": { "name": "Mode traitement" },
       "ph_mode": { "name": "Mode pH" },
       "heater_mode": { "name": "Mode chauffage" },
-      "alert_count": { "name": "Alertes" }
+      "alert_count": { "name": "Alertes" },
+      "container_remaining_ph_minus": { "name": "Bidon pH- restant" },
+      "container_remaining_chlorine": { "name": "Bidon chlore restant" },
+      "container_days_remaining_ph_minus": { "name": "Jours restants bidon pH-" },
+      "container_days_remaining_chlorine": { "name": "Jours restants bidon chlore" }
     },
     "select": {
       "filtration_mode": { "name": "Filtration" },
@@ -106,7 +110,13 @@
       "setpoint_ph": { "name": "Consigne pH" },
       "setpoint_redox": { "name": "Consigne redox" },
       "setpoint_chlorine": { "name": "Consigne chlore" },
-      "pump_speed": { "name": "Vitesse pompe" }
+      "pump_speed": { "name": "Vitesse pompe" },
+      "capacity_ph_minus": { "name": "Capacite bidon pH-" },
+      "capacity_chlorine": { "name": "Capacite bidon chlore" }
+    },
+    "button": {
+      "reset_ph_container": { "name": "Reinitialiser bidon pH-" },
+      "reset_chlorine_container": { "name": "Reinitialiser bidon chlore" }
     }
   }
 }

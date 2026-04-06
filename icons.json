@@ -31,7 +31,11 @@
       "treatment_mode": { "default": "mdi:water-plus" },
       "ph_mode": { "default": "mdi:ph" },
       "heater_mode": { "default": "mdi:radiator" },
-      "alert_count": { "default": "mdi:alert" }
+      "alert_count": { "default": "mdi:alert" },
+      "container_remaining_ph_minus": { "default": "mdi:beaker-minus-outline" },
+      "container_remaining_chlorine": { "default": "mdi:flask-minus-outline" },
+      "container_days_remaining_ph_minus": { "default": "mdi:calendar-clock" },
+      "container_days_remaining_chlorine": { "default": "mdi:calendar-clock" }
     },
     "select": {
       "filtration_mode": { "default": "mdi:pump" },
@@ -61,7 +65,13 @@
       "setpoint_ph": { "default": "mdi:ph" },
       "setpoint_redox": { "default": "mdi:chemical-weapon" },
       "setpoint_chlorine": { "default": "mdi:flask-outline" },
-      "pump_speed": { "default": "mdi:pump" }
+      "pump_speed": { "default": "mdi:pump" },
+      "capacity_ph_minus": { "default": "mdi:beaker-outline" },
+      "capacity_chlorine": { "default": "mdi:flask-outline" }
+    },
+    "button": {
+      "reset_ph_container": { "default": "mdi:delete-restore" },
+      "reset_chlorine_container": { "default": "mdi:delete-restore" }
     }
   }
 }
