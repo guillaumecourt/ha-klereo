@@ -45,10 +45,18 @@ async def async_setup_entry(
             _LOGGER.error("Invalid 'idSystem' format: %s.", device_id)
             continue
 
-        # Probe sensors
-        for probe in device.get("probes", []):
-            if probe.get("type") in PROBE_TYPES:
-                sensors.append(KlereoProbeSensor(coordinator, device, probe))
+        # Probe sensors — detect duplicates by type
+        probes = [p for p in device.get("probes", []) if p.get("type") in PROBE_TYPES]
+        type_counts: dict[int, int] = {}
+        for probe in probes:
+            t = probe.get("type")
+            type_counts[t] = type_counts.get(t, 0) + 1
+        type_instance: dict[int, int] = {}
+        for probe in probes:
+            t = probe.get("type")
+            type_instance[t] = type_instance.get(t, 0) + 1
+            suffix = f" {type_instance[t]}" if type_counts.get(t, 0) > 1 else None
+            sensors.append(KlereoProbeSensor(coordinator, device, probe, suffix))
 
         # Calculated sensors
         if "params" in device and isinstance(device["params"], dict):
@@ -97,7 +105,7 @@ def _calculated_sensor_has_data(params: dict, sensor_def: dict) -> bool:
 class KlereoProbeSensor(KlereoEntity, SensorEntity):
     """Representation of a Klereo probe sensor."""
 
-    def __init__(self, coordinator, device: dict, probe: dict) -> None:
+    def __init__(self, coordinator, device: dict, probe: dict, suffix: str | None = None) -> None:
         super().__init__(coordinator, device)
         self._probe = probe
         self._probe_index = probe.get("index", "N/A")
@@ -105,6 +113,8 @@ class KlereoProbeSensor(KlereoEntity, SensorEntity):
         probe_details = PROBE_TYPES[probe_type]
 
         self._attr_translation_key = probe_details["id_key"]
+        if suffix:
+            self._attr_name = probe_details["name"] + suffix
         self._attr_unique_id = f"{self._device_id}_{probe_details['id_key']}_{self._probe_index}"
         self._attr_native_unit_of_measurement = probe_details.get("unit")
 

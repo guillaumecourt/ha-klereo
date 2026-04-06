@@ -19,6 +19,7 @@ class KlereoDataUpdateCoordinator(DataUpdateCoordinator):
     def __init__(self, hass: HomeAssistant, api: KlereoApi, update_interval: timedelta):
         super().__init__(hass, _LOGGER, name=DOMAIN, update_interval=update_interval)
         self.api = api
+        self._previous_alert_count: dict[int, int] = {}
 
     async def _async_update_data(self):
         """Fetch data from the API."""
@@ -31,6 +32,18 @@ class KlereoDataUpdateCoordinator(DataUpdateCoordinator):
                 return []
 
             _LOGGER.debug("Klereo data updated: %d device(s).", len(data))
+
+            # Detect new alerts
+            for device in data:
+                device_id = device.get("idSystem")
+                if not device_id:
+                    continue
+                current_count = device.get("alertCount", 0)
+                previous_count = self._previous_alert_count.get(device_id, 0)
+                if current_count > previous_count:
+                    await self._notify_new_alerts(device, current_count - previous_count)
+                self._previous_alert_count[device_id] = current_count
+
             return data
 
         except aiohttp.ClientResponseError as err:
@@ -42,3 +55,42 @@ class KlereoDataUpdateCoordinator(DataUpdateCoordinator):
         except Exception as err:
             _LOGGER.error("Error communicating with Klereo API", exc_info=True)
             raise UpdateFailed(f"Error communicating with Klereo API: {err}") from err
+
+    async def _notify_new_alerts(self, device: dict, new_count: int) -> None:
+        """Send notifications when new alerts are detected."""
+        pool_name = device.get("poolNickname", "Klereo")
+        device_id = device.get("idSystem")
+        alert_count = device.get("alertCount", 0)
+        alerts = device.get("alerts", [])
+
+        if alerts:
+            messages = [a.get("message", str(a)) if isinstance(a, dict) else str(a) for a in alerts]
+            message = f"{new_count} nouvelle(s) alerte(s) sur {pool_name}:\n" + "\n".join(f"- {m}" for m in messages)
+        else:
+            message = f"{new_count} nouvelle(s) alerte(s) sur {pool_name}"
+
+        _LOGGER.warning("Klereo alert: %s", message)
+
+        # Persistent notification
+        await self.hass.services.async_call(
+            "persistent_notification", "create",
+            {"title": "Klereo - Alerte", "message": message,
+             "notification_id": f"klereo_alert_{device_id}"},
+        )
+
+        # Mobile push (notify.notify sends to all devices)
+        try:
+            await self.hass.services.async_call(
+                "notify", "notify",
+                {"title": "Klereo - Alerte", "message": message},
+            )
+        except Exception:
+            _LOGGER.debug("Mobile notification service not available")
+
+        # HA event for automations
+        self.hass.bus.async_fire("klereo_alert", {
+            "device_id": device_id,
+            "pool_name": pool_name,
+            "alert_count": alert_count,
+            "new_alerts": new_count,
+        })
