@@ -1,8 +1,8 @@
 {
   "domain": "klereo",
   "name": "Klereo",
-  "documentation": "https://github.com/guillaumecourt/klereo-homeassistant/blob/main/README.md",
-  "issue_tracker": "https://github.com/guillaumecourt/klereo-homeassistant/issues",
+  "documentation": "https://github.com/guillaumecourt/ha-klereo",
+  "issue_tracker": "https://github.com/guillaumecourt/ha-klereo/issues",
   "dependencies": [],
   "codeowners": ["@guillaumecourt"],
   "version": "0.2.0",
