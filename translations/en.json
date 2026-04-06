@@ -1,0 +1,112 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to Klereo",
+        "data": {
+          "username": "Username",
+          "password": "Password",
+          "title": "Title"
+        }
+      },
+      "pool": {
+        "title": "Select Pool",
+        "data": {
+          "pool_id": "Pool"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Re-authenticate",
+        "data": {
+          "username": "Username",
+          "password": "Password"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Cannot connect to Klereo API",
+      "invalid_auth": "Invalid credentials",
+      "api_error": "API error",
+      "unknown_error": "Unknown error",
+      "password_too_short": "Password is required"
+    },
+    "abort": {
+      "already_configured": "Already configured",
+      "reauth_successful": "Re-authentication successful"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "data": {
+          "update_interval": "Update interval (seconds)"
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "tech_room_temp": { "name": "Tech Room Temp" },
+      "air_temp": { "name": "Air Temp" },
+      "water_level": { "name": "Water Level" },
+      "ph": { "name": "pH" },
+      "redox": { "name": "Redox" },
+      "water_temp": { "name": "Water Temp" },
+      "pressure": { "name": "Pressure" },
+      "generic": { "name": "Generic" },
+      "flow": { "name": "Flow" },
+      "container_level": { "name": "Container Level" },
+      "cover_pos": { "name": "Cover Position" },
+      "chlorine": { "name": "Chlorine" },
+      "conductivity": { "name": "Conductivity" },
+      "tds": { "name": "TDS" },
+      "ph_volume_today": { "name": "pH Volume Today" },
+      "ph_volume_total": { "name": "pH Volume Total" },
+      "ph_max_daily_volume": { "name": "pH Max Daily Volume" },
+      "chlorine_volume_today": { "name": "Chlorine Volume Today" },
+      "chlorine_volume_total": { "name": "Chlorine Volume Total" },
+      "filtration_today_time": { "name": "Filtration Time Today" },
+      "filtration_total_time": { "name": "Filtration Time Total" },
+      "heating_today_time": { "name": "Heating Time Today" },
+      "heating_total_time": { "name": "Heating Time Total" },
+      "chlorine_run_today_time": { "name": "Chlorine Run Time Today" },
+      "chlorine_run_total_time": { "name": "Chlorine Run Time Total" },
+      "elec_gram_production": { "name": "Electrolysis Production" },
+      "pool_mode": { "name": "Pool Mode" },
+      "treatment_mode": { "name": "Treatment Mode" },
+      "ph_mode": { "name": "pH Mode" },
+      "heater_mode": { "name": "Heater Mode" },
+      "alert_count": { "name": "Alerts" }
+    },
+    "select": {
+      "filtration_mode": { "name": "Filtration" },
+      "lighting_mode": { "name": "Lighting" },
+      "heating_mode": { "name": "Heating Mode" }
+    },
+    "switch": {
+      "output_lighting": { "name": "Lighting" },
+      "output_filtration": { "name": "Filtration" },
+      "output_ph_minus": { "name": "pH Minus" },
+      "output_ph_plus": { "name": "pH Plus" },
+      "output_chlorine": { "name": "Chlorine" },
+      "output_electrolysis": { "name": "Electrolysis" },
+      "output_heating": { "name": "Heating" },
+      "output_auxiliary_1": { "name": "Auxiliary 1" },
+      "output_auxiliary_2": { "name": "Auxiliary 2" },
+      "output_auxiliary_3": { "name": "Auxiliary 3" },
+      "output_auxiliary_4": { "name": "Auxiliary 4" },
+      "output_cover": { "name": "Cover" },
+      "output_counter_current": { "name": "Counter Current" },
+      "output_alarm": { "name": "Alarm" },
+      "output_water_fill": { "name": "Water Fill" },
+      "output_backwash": { "name": "Backwash" }
+    },
+    "number": {
+      "setpoint_water_temp": { "name": "Water Temp Setpoint" },
+      "setpoint_ph": { "name": "pH Setpoint" },
+      "setpoint_redox": { "name": "Redox Setpoint" },
+      "setpoint_chlorine": { "name": "Chlorine Setpoint" },
+      "pump_speed": { "name": "Pump Speed" }
+    }
+  }
+}

@@ -1,0 +1,67 @@
+{
+  "entity": {
+    "sensor": {
+      "tech_room_temp": { "default": "mdi:thermometer" },
+      "air_temp": { "default": "mdi:thermometer-lines" },
+      "water_level": { "default": "mdi:waves-arrow-up" },
+      "ph": { "default": "mdi:ph" },
+      "redox": { "default": "mdi:chemical-weapon" },
+      "water_temp": { "default": "mdi:thermometer" },
+      "pressure": { "default": "mdi:gauge" },
+      "generic": { "default": "mdi:chart-line" },
+      "flow": { "default": "mdi:water-pump" },
+      "container_level": { "default": "mdi:cup-water" },
+      "cover_pos": { "default": "mdi:window-shutter" },
+      "chlorine": { "default": "mdi:flask-outline" },
+      "conductivity": { "default": "mdi:flash-outline" },
+      "tds": { "default": "mdi:water-opacity" },
+      "ph_volume_today": { "default": "mdi:flask-minus-outline" },
+      "ph_volume_total": { "default": "mdi:flask-minus" },
+      "ph_max_daily_volume": { "default": "mdi:gauge-high" },
+      "chlorine_volume_today": { "default": "mdi:flask-plus-outline" },
+      "chlorine_volume_total": { "default": "mdi:flask-plus" },
+      "filtration_today_time": { "default": "mdi:clock-outline" },
+      "filtration_total_time": { "default": "mdi:clock-check-outline" },
+      "heating_today_time": { "default": "mdi:radiator" },
+      "heating_total_time": { "default": "mdi:radiator" },
+      "chlorine_run_today_time": { "default": "mdi:clock-outline" },
+      "chlorine_run_total_time": { "default": "mdi:clock-check-outline" },
+      "elec_gram_production": { "default": "mdi:scale" },
+      "pool_mode": { "default": "mdi:pool" },
+      "treatment_mode": { "default": "mdi:water-plus" },
+      "ph_mode": { "default": "mdi:ph" },
+      "heater_mode": { "default": "mdi:radiator" },
+      "alert_count": { "default": "mdi:alert" }
+    },
+    "select": {
+      "filtration_mode": { "default": "mdi:pump" },
+      "lighting_mode": { "default": "mdi:lightbulb-multiple-outline" },
+      "heating_mode": { "default": "mdi:radiator" }
+    },
+    "switch": {
+      "output_lighting": { "default": "mdi:toggle-switch" },
+      "output_filtration": { "default": "mdi:toggle-switch" },
+      "output_ph_minus": { "default": "mdi:toggle-switch" },
+      "output_ph_plus": { "default": "mdi:toggle-switch" },
+      "output_chlorine": { "default": "mdi:toggle-switch" },
+      "output_electrolysis": { "default": "mdi:toggle-switch" },
+      "output_heating": { "default": "mdi:toggle-switch" },
+      "output_auxiliary_1": { "default": "mdi:toggle-switch" },
+      "output_auxiliary_2": { "default": "mdi:toggle-switch" },
+      "output_auxiliary_3": { "default": "mdi:toggle-switch" },
+      "output_auxiliary_4": { "default": "mdi:toggle-switch" },
+      "output_cover": { "default": "mdi:toggle-switch" },
+      "output_counter_current": { "default": "mdi:toggle-switch" },
+      "output_alarm": { "default": "mdi:toggle-switch" },
+      "output_water_fill": { "default": "mdi:toggle-switch" },
+      "output_backwash": { "default": "mdi:toggle-switch" }
+    },
+    "number": {
+      "setpoint_water_temp": { "default": "mdi:thermometer-water" },
+      "setpoint_ph": { "default": "mdi:ph" },
+      "setpoint_redox": { "default": "mdi:chemical-weapon" },
+      "setpoint_chlorine": { "default": "mdi:flask-outline" },
+      "pump_speed": { "default": "mdi:pump" }
+    }
+  }
+}

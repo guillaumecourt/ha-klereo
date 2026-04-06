@@ -1,0 +1,120 @@
+# Quality Scale tracking for Klereo integration
+# Target: Gold — achieved 2026-04-03
+
+rules:
+  # --- Bronze (all done) ---
+  action-exceptions:
+    status: done
+  config-entry-unloading:
+    status: done
+  config-flow:
+    status: done
+  config-flow-test-coverage:
+    status: done
+  dependency-transparency:
+    status: done
+  docs-actions:
+    status: exempt
+    comment: No custom service actions
+  docs-high-level-description:
+    status: done
+  docs-installation-instructions:
+    status: done
+  entity-event-setup:
+    status: done
+  entity-unique-id:
+    status: done
+  has-entity-name:
+    status: done
+  runtime-data:
+    status: done
+  test-before-configure:
+    status: done
+  test-before-setup:
+    status: done
+  unique-config-entry:
+    status: done
+
+  # --- Silver (all done) ---
+  docs-configuration-parameters:
+    status: done
+  docs-installation-parameters:
+    status: done
+  entity-unavailable:
+    status: done
+  integration-owner:
+    status: done
+  log-when-unavailable:
+    status: done
+  parallel-updates:
+    status: done
+  reauthentication-flow:
+    status: done
+  test-coverage:
+    status: done
+    comment: 281 tests, all platforms covered
+
+  # --- Gold (all done or exempt) ---
+  devices:
+    status: done
+    comment: DeviceInfo class in entity.py
+  diagnostics:
+    status: done
+    comment: diagnostics.py with async_redact_data
+  discovery:
+    status: exempt
+    comment: Cloud-only API — no local discovery possible
+  discovery-update-info:
+    status: exempt
+    comment: Cloud-only API — no local discovery possible
+  docs-data-update:
+    status: done
+    comment: Added to README.md
+  docs-examples:
+    status: done
+    comment: Automation examples in README.md
+  docs-known-limitations:
+    status: done
+    comment: Added to README.md
+  docs-supported-devices:
+    status: done
+    comment: Added to README.md
+  docs-supported-functions:
+    status: done
+    comment: Entity tables in README.md
+  docs-troubleshooting:
+    status: done
+    comment: Added to README.md
+  docs-use-cases:
+    status: done
+    comment: Added to README.md
+  dynamic-devices:
+    status: done
+    comment: Coordinator detects new devices and triggers reload
+  entity-category:
+    status: done
+    comment: DIAGNOSTIC for status, CONFIG for setpoints
+  entity-device-class:
+    status: done
+    comment: device_class on binary_sensors, sensors
+  entity-disabled-by-default:
+    status: done
+    comment: Status sensors disabled by default
+  entity-translations:
+    status: done
+    comment: EntityDescription with translation_key on all platforms
+  exception-translations:
+    status: done
+    comment: English exception messages, strings.json exceptions section
+  icon-translations:
+    status: done
+    comment: icons.json with state variants
+  reconfiguration-flow:
+    status: done
+    comment: async_step_reconfigure for pool change
+  repair-issues:
+    status: done
+    comment: auth_expired and api_unreachable repair issues
+  stale-devices:
+    status: done
+    comment: Devices removed after 3 consecutive absences

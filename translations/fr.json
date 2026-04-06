@@ -1,0 +1,112 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connexion a Klereo",
+        "data": {
+          "username": "Identifiant",
+          "password": "Mot de passe",
+          "title": "Titre"
+        }
+      },
+      "pool": {
+        "title": "Selectionner la piscine",
+        "data": {
+          "pool_id": "Piscine"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Re-authentification",
+        "data": {
+          "username": "Identifiant",
+          "password": "Mot de passe"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Impossible de se connecter a l'API Klereo",
+      "invalid_auth": "Identifiants invalides",
+      "api_error": "Erreur API",
+      "unknown_error": "Erreur inconnue",
+      "password_too_short": "Le mot de passe est requis"
+    },
+    "abort": {
+      "already_configured": "Deja configure",
+      "reauth_successful": "Re-authentification reussie"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "data": {
+          "update_interval": "Intervalle de mise a jour (secondes)"
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "tech_room_temp": { "name": "Temp. local technique" },
+      "air_temp": { "name": "Temp. air" },
+      "water_level": { "name": "Niveau d'eau" },
+      "ph": { "name": "pH" },
+      "redox": { "name": "Redox" },
+      "water_temp": { "name": "Temp. eau" },
+      "pressure": { "name": "Pression" },
+      "generic": { "name": "Generique" },
+      "flow": { "name": "Debit" },
+      "container_level": { "name": "Niveau bidon" },
+      "cover_pos": { "name": "Position couverture" },
+      "chlorine": { "name": "Chlore" },
+      "conductivity": { "name": "Conductivite" },
+      "tds": { "name": "TDS" },
+      "ph_volume_today": { "name": "Volume pH aujourd'hui" },
+      "ph_volume_total": { "name": "Volume pH total" },
+      "ph_max_daily_volume": { "name": "Volume pH max journalier" },
+      "chlorine_volume_today": { "name": "Volume chlore aujourd'hui" },
+      "chlorine_volume_total": { "name": "Volume chlore total" },
+      "filtration_today_time": { "name": "Temps filtration aujourd'hui" },
+      "filtration_total_time": { "name": "Temps filtration total" },
+      "heating_today_time": { "name": "Temps chauffage aujourd'hui" },
+      "heating_total_time": { "name": "Temps chauffage total" },
+      "chlorine_run_today_time": { "name": "Temps electrolyse aujourd'hui" },
+      "chlorine_run_total_time": { "name": "Temps electrolyse total" },
+      "elec_gram_production": { "name": "Production electrolyse" },
+      "pool_mode": { "name": "Mode piscine" },
+      "treatment_mode": { "name": "Mode traitement" },
+      "ph_mode": { "name": "Mode pH" },
+      "heater_mode": { "name": "Mode chauffage" },
+      "alert_count": { "name": "Alertes" }
+    },
+    "select": {
+      "filtration_mode": { "name": "Filtration" },
+      "lighting_mode": { "name": "Eclairage" },
+      "heating_mode": { "name": "Mode chauffage" }
+    },
+    "switch": {
+      "output_lighting": { "name": "Eclairage" },
+      "output_filtration": { "name": "Filtration" },
+      "output_ph_minus": { "name": "pH Moins" },
+      "output_ph_plus": { "name": "pH Plus" },
+      "output_chlorine": { "name": "Chlore" },
+      "output_electrolysis": { "name": "Electrolyse" },
+      "output_heating": { "name": "Chauffage" },
+      "output_auxiliary_1": { "name": "Auxiliaire 1" },
+      "output_auxiliary_2": { "name": "Auxiliaire 2" },
+      "output_auxiliary_3": { "name": "Auxiliaire 3" },
+      "output_auxiliary_4": { "name": "Auxiliaire 4" },
+      "output_cover": { "name": "Couverture" },
+      "output_counter_current": { "name": "Nage contre-courant" },
+      "output_alarm": { "name": "Alarme" },
+      "output_water_fill": { "name": "Remplissage" },
+      "output_backwash": { "name": "Contre-lavage" }
+    },
+    "number": {
+      "setpoint_water_temp": { "name": "Consigne temp. eau" },
+      "setpoint_ph": { "name": "Consigne pH" },
+      "setpoint_redox": { "name": "Consigne redox" },
+      "setpoint_chlorine": { "name": "Consigne chlore" },
+      "pump_speed": { "name": "Vitesse pompe" }
+    }
+  }
+}
