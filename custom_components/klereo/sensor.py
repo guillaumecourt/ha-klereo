@@ -12,7 +12,7 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import PROBE_TYPES, CALCULATED_SENSORS, STATUS_SENSORS, CONTAINER_TRACKING
+from .const import PROBE_TYPES, CALCULATED_SENSORS, STATUS_SENSORS, CONTAINER_TRACKING, ALERT_CODES
 from .entity import KlereoEntity
 
 _LOGGER = logging.getLogger(__name__)
@@ -274,7 +274,18 @@ class KlereoAlertCountSensor(KlereoEntity, SensorEntity):
         if device_data:
             alerts = device_data.get("alerts", [])
         self._attr_native_value = len(alerts)
-        self._attr_extra_state_attributes = {"messages": alerts}
+        alerts_detail = []
+        for alert in alerts:
+            if isinstance(alert, dict):
+                code = alert.get("code", 0)
+                alerts_detail.append({
+                    "code": code,
+                    "description": ALERT_CODES.get(code, f"Alerte inconnue ({code})"),
+                    "level": alert.get("level"),
+                })
+            else:
+                alerts_detail.append({"description": str(alert)})
+        self._attr_extra_state_attributes = {"alerts": alerts_detail}
 
     @property
     def extra_state_attributes(self) -> dict:

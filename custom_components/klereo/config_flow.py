@@ -161,24 +161,72 @@ class KlereoConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     @staticmethod
     def async_get_options_flow(config_entry: config_entries.ConfigEntry):
-        return KlereoOptionsFlowHandler(config_entry)
+        return KlereoOptionsFlowHandler()
 
 
 class KlereoOptionsFlowHandler(config_entries.OptionsFlow):
-    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
-        self.config_entry = config_entry
-
     async def async_step_init(self, user_input=None):
+        errors = {}
+
         if user_input is not None:
-            return self.async_create_entry(title="Options", data=user_input)
+            new_username = user_input.get("username", "")
+            new_password = user_input.get("password", "")
+
+            credentials_changed = (
+                new_username != self.config_entry.data.get("username")
+                or new_password != self.config_entry.data.get("password")
+            )
+
+            if credentials_changed and new_username and new_password:
+                try:
+                    api = KlereoApi(self.hass, new_username, new_password)
+                    await api.async_get_token()
+                except aiohttp.ClientConnectionError:
+                    errors["base"] = "cannot_connect"
+                except aiohttp.ClientResponseError as e:
+                    if e.status == 401:
+                        errors["base"] = "invalid_auth"
+                    else:
+                        errors["base"] = "api_error"
+                except Exception:
+                    errors["base"] = "unknown_error"
+
+            if not errors:
+                new_options = {"update_interval": user_input["update_interval"]}
+
+                if credentials_changed and new_username and new_password:
+                    new_data = {
+                        **self.config_entry.data,
+                        "username": new_username,
+                        "password": new_password,
+                    }
+                    self.hass.config_entries.async_update_entry(
+                        self.config_entry, data=new_data, options=new_options
+                    )
+                    await self.hass.config_entries.async_reload(
+                        self.config_entry.entry_id
+                    )
+                    return self.async_abort(reason="reauth_successful")
+
+                return self.async_create_entry(title="Options", data=new_options)
+
         return self.async_show_form(
             step_id="init",
             data_schema=vol.Schema(
                 {
                     vol.Required(
+                        "username",
+                        default=self.config_entry.data.get("username", ""),
+                    ): str,
+                    vol.Required(
+                        "password",
+                        default=self.config_entry.data.get("password", ""),
+                    ): str,
+                    vol.Required(
                         "update_interval",
                         default=self.config_entry.options.get("update_interval", 15),
-                    ): vol.All(int, vol.Range(min=1))
+                    ): vol.All(int, vol.Range(min=1)),
                 }
             ),
+            errors=errors,
         )

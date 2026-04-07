@@ -412,6 +412,27 @@ HEATING_MODE_TO_VALUE = {
 HEATING_VALUE_TO_MODE = {v: k for k, v in HEATING_MODE_TO_VALUE.items()}
 HEATING_OUTPUT_INDEX = 6
 
+# --- Alert codes (reverse-engineered from Klereo app) ---
+ALERT_CODES = {
+    10: "Sonde temperature eau deconnectee",
+    11: "Sonde pH deconnectee",
+    12: "Sonde redox deconnectee",
+    13: "Sonde pression deconnectee",
+    20: "pH trop bas",
+    21: "pH trop haut",
+    22: "Redox trop bas",
+    23: "Redox trop haut",
+    30: "Pression filtre basse",
+    31: "Pression filtre haute",
+    40: "Volume pH journalier depasse",
+    41: "Volume traitement journalier depasse",
+    50: "Erreur communication tableau",
+    51: "Erreur communication afficheur",
+    60: "Ecran de la pompe verrouille",
+    70: "Sel insuffisant",
+    80: "Temperature hors gel",
+}
+
 # --- Container tracking definitions (for reset buttons) ---
 CONTAINER_TRACKING = {
     "ph_minus": {

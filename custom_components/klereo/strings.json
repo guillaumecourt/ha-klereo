@@ -39,6 +39,8 @@
     "step": {
       "init": {
         "data": {
+          "username": "Username",
+          "password": "Password",
           "update_interval": "Update interval (minutes)"
         }
       }

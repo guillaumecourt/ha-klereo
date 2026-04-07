@@ -7,7 +7,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from .const import DOMAIN, CONTAINER_TRACKING
+from .const import DOMAIN, CONTAINER_TRACKING, ALERT_CODES
 from .api import KlereoApi
 
 _LOGGER = logging.getLogger(__name__)
@@ -67,8 +67,14 @@ class KlereoDataUpdateCoordinator(DataUpdateCoordinator):
         alerts = device.get("alerts", [])
 
         if alerts:
-            messages = [a.get("message", str(a)) if isinstance(a, dict) else str(a) for a in alerts]
-            message = f"{new_count} nouvelle(s) alerte(s) sur {pool_name}:\n" + "\n".join(f"- {m}" for m in messages)
+            descriptions = []
+            for a in alerts:
+                if isinstance(a, dict):
+                    code = a.get("code", 0)
+                    descriptions.append(ALERT_CODES.get(code, f"Alerte inconnue ({code})"))
+                else:
+                    descriptions.append(str(a))
+            message = f"Alerte(s) sur {pool_name} :\n" + "\n".join(f"- {d}" for d in descriptions)
         else:
             message = f"{new_count} nouvelle(s) alerte(s) sur {pool_name}"
 
