@@ -5,7 +5,7 @@
   "issue_tracker": "https://github.com/guillaumecourt/ha-klereo/issues",
   "dependencies": [],
   "codeowners": ["@guillaumecourt"],
-  "version": "0.2.0",
+  "version": "0.2.1",
   "requirements": ["beautifulsoup4>=4.12.2"],
   "config_flow": true,
   "iot_class": "cloud_polling",
