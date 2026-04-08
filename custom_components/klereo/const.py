@@ -402,12 +402,12 @@ OUTPUT_TRANSLATION_KEYS = {
 }
 
 # --- Heating mode constants ---
-HEATING_MODE_OPTIONS = ["Stop", "Auto", "Cooling", "Heating"]
+HEATING_MODE_OPTIONS = ["Arrêt", "Automatique", "Refroidissement", "Chauffage"]
 HEATING_MODE_TO_VALUE = {
-    "Stop": 0,
-    "Auto": 1,
-    "Cooling": 2,
-    "Heating": 3,
+    "Arrêt": 0,
+    "Automatique": 1,
+    "Refroidissement": 2,
+    "Chauffage": 3,
 }
 HEATING_VALUE_TO_MODE = {v: k for k, v in HEATING_MODE_TO_VALUE.items()}
 HEATING_OUTPUT_INDEX = 6
