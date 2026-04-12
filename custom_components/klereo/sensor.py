@@ -32,6 +32,19 @@ async def async_setup_entry(
         return
 
     sensors: list[SensorEntity] = []
+    failed_count = 0
+
+    def _safe_create(entity_cls, *args, **kwargs):
+        """Create an entity, returning None on failure."""
+        nonlocal failed_count
+        try:
+            return entity_cls(*args, **kwargs)
+        except Exception:
+            _LOGGER.warning(
+                "Failed to create %s entity", entity_cls.__name__, exc_info=True
+            )
+            failed_count += 1
+            return None
 
     for device in coordinator.data:
         device_id = device.get("idSystem")
@@ -56,7 +69,9 @@ async def async_setup_entry(
             t = probe.get("type")
             type_instance[t] = type_instance.get(t, 0) + 1
             suffix = f" {type_instance[t]}" if type_counts.get(t, 0) > 1 else None
-            sensors.append(KlereoProbeSensor(coordinator, device, probe, suffix))
+            entity = _safe_create(KlereoProbeSensor, coordinator, device, probe, suffix)
+            if entity is not None:
+                sensors.append(entity)
 
         # Calculated sensors
         if "params" in device and isinstance(device["params"], dict):
@@ -66,26 +81,39 @@ async def async_setup_entry(
             for sensor_key, sensor_def in CALCULATED_SENSORS.items():
                 # Only add if the required params exist
                 if _calculated_sensor_has_data(merged_params, sensor_def):
-                    sensors.append(KlereoCalculatedSensor(coordinator, device, sensor_key, sensor_def))
+                    entity = _safe_create(KlereoCalculatedSensor, coordinator, device, sensor_key, sensor_def)
+                    if entity is not None:
+                        sensors.append(entity)
 
         # Status sensors
         if "params" in device and isinstance(device["params"], dict):
             for param_key, status_def in STATUS_SENSORS.items():
                 if param_key in device["params"]:
-                    sensors.append(KlereoStatusSensor(coordinator, device, param_key, status_def))
+                    entity = _safe_create(KlereoStatusSensor, coordinator, device, param_key, status_def)
+                    if entity is not None:
+                        sensors.append(entity)
 
         # Container estimation sensors
         for ct_key, ct_def in CONTAINER_TRACKING.items():
-            sensors.append(KlereoContainerRemainingSensor(coordinator, device, entry, ct_key, ct_def))
-            sensors.append(KlereoContainerDaysRemainingSensor(coordinator, device, entry, ct_key, ct_def))
+            entity = _safe_create(KlereoContainerRemainingSensor, coordinator, device, entry, ct_key, ct_def)
+            if entity is not None:
+                sensors.append(entity)
+            entity = _safe_create(KlereoContainerDaysRemainingSensor, coordinator, device, entry, ct_key, ct_def)
+            if entity is not None:
+                sensors.append(entity)
 
         # Alert sensors
         if "alerts" in device:
-            sensors.append(KlereoAlertCountSensor(coordinator, device))
+            entity = _safe_create(KlereoAlertCountSensor, coordinator, device)
+            if entity is not None:
+                sensors.append(entity)
+
+    if failed_count > 0:
+        _LOGGER.warning("%d sensor(s) failed to initialize and were skipped", failed_count)
 
     if sensors:
         async_add_entities(sensors)
-        _LOGGER.info("Adding %d Klereo sensors", len(sensors))
+        _LOGGER.debug("Added %d Klereo sensors", len(sensors))
     else:
         _LOGGER.info("No Klereo sensors to add.")
 

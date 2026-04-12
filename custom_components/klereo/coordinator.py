@@ -28,8 +28,7 @@ class KlereoDataUpdateCoordinator(DataUpdateCoordinator):
             data = await self.api.async_get_pool_details()
 
             if not data:
-                _LOGGER.warning("No data received from Klereo API.")
-                return []
+                raise UpdateFailed("No data received from Klereo API.")
 
             _LOGGER.debug("Klereo data updated: %d device(s).", len(data))
 
@@ -133,10 +132,13 @@ class KlereoDataUpdateCoordinator(DataUpdateCoordinator):
                     continue
 
                 # Update or add today's entry
+                rounded_volume = round(volume_today, 3)
                 if history and history[-1].get("date") == today_str:
-                    history[-1]["volume"] = round(volume_today, 3)
+                    if history[-1].get("volume") == rounded_volume:
+                        continue
+                    history[-1]["volume"] = rounded_volume
                 else:
-                    history.append({"date": today_str, "volume": round(volume_today, 3)})
+                    history.append({"date": today_str, "volume": rounded_volume})
 
                 # Keep only last 7 days
                 history = history[-7:]
