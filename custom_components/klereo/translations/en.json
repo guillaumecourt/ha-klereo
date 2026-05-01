@@ -120,6 +120,12 @@
       "reset_ph_container": { "name": "Reset pH- Container" },
       "reset_chlorine_container": { "name": "Reset Chlorine Container" },
       "refresh": { "name": "Refresh" }
+    },
+    "binary_sensor": {
+      "filtration_running":   { "name": "Filtration Running" },
+      "heating_running":      { "name": "Heating Running" },
+      "lighting_on":          { "name": "Lighting" },
+      "electrolysis_running": { "name": "Electrolysis Running" }
     }
   }
 }

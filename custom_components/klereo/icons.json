@@ -27,10 +27,41 @@
       "chlorine_run_today_time": { "default": "mdi:clock-outline" },
       "chlorine_run_total_time": { "default": "mdi:clock-check-outline" },
       "elec_gram_production": { "default": "mdi:scale" },
-      "pool_mode": { "default": "mdi:pool" },
-      "treatment_mode": { "default": "mdi:water-plus" },
-      "ph_mode": { "default": "mdi:ph" },
-      "heater_mode": { "default": "mdi:radiator" },
+      "pool_mode": {
+        "default": "mdi:pool",
+        "state": {
+          "Summer": "mdi:white-balance-sunny",
+          "Winter": "mdi:snowflake",
+          "Away": "mdi:airplane",
+          "Stop": "mdi:stop-circle-outline"
+        }
+      },
+      "treatment_mode": {
+        "default": "mdi:water-plus",
+        "state": {
+          "Auto": "mdi:water-plus",
+          "Manual": "mdi:hand-back-right",
+          "Hybrid": "mdi:swap-horizontal",
+          "Stop": "mdi:stop-circle-outline"
+        }
+      },
+      "ph_mode": {
+        "default": "mdi:ph",
+        "state": {
+          "Auto": "mdi:ph",
+          "Manual": "mdi:hand-back-right",
+          "Stop": "mdi:stop-circle-outline"
+        }
+      },
+      "heater_mode": {
+        "default": "mdi:radiator",
+        "state": {
+          "Auto": "mdi:radiator",
+          "Heating": "mdi:fire",
+          "Cooling": "mdi:snowflake",
+          "Stop": "mdi:radiator-off"
+        }
+      },
       "alert_count": { "default": "mdi:alert" },
       "container_remaining_ph_minus": { "default": "mdi:beaker-minus-outline" },
       "container_remaining_chlorine": { "default": "mdi:flask-minus-outline" },
@@ -43,22 +74,22 @@
       "heating_mode": { "default": "mdi:radiator" }
     },
     "switch": {
-      "output_lighting": { "default": "mdi:toggle-switch" },
-      "output_filtration": { "default": "mdi:toggle-switch" },
-      "output_ph_minus": { "default": "mdi:toggle-switch" },
-      "output_ph_plus": { "default": "mdi:toggle-switch" },
-      "output_chlorine": { "default": "mdi:toggle-switch" },
-      "output_electrolysis": { "default": "mdi:toggle-switch" },
-      "output_heating": { "default": "mdi:toggle-switch" },
+      "output_lighting": { "default": "mdi:lightbulb" },
+      "output_filtration": { "default": "mdi:pump" },
+      "output_ph_minus": { "default": "mdi:flask-minus" },
+      "output_ph_plus": { "default": "mdi:flask-plus" },
+      "output_chlorine": { "default": "mdi:flask-outline" },
+      "output_electrolysis": { "default": "mdi:flash" },
+      "output_heating": { "default": "mdi:radiator" },
       "output_auxiliary_1": { "default": "mdi:toggle-switch" },
       "output_auxiliary_2": { "default": "mdi:toggle-switch" },
       "output_auxiliary_3": { "default": "mdi:toggle-switch" },
       "output_auxiliary_4": { "default": "mdi:toggle-switch" },
-      "output_cover": { "default": "mdi:toggle-switch" },
-      "output_counter_current": { "default": "mdi:toggle-switch" },
-      "output_alarm": { "default": "mdi:toggle-switch" },
-      "output_water_fill": { "default": "mdi:toggle-switch" },
-      "output_backwash": { "default": "mdi:toggle-switch" }
+      "output_cover": { "default": "mdi:window-shutter" },
+      "output_counter_current": { "default": "mdi:waves-arrow-right" },
+      "output_alarm": { "default": "mdi:alarm-light" },
+      "output_water_fill": { "default": "mdi:water-plus" },
+      "output_backwash": { "default": "mdi:water-sync" }
     },
     "number": {
       "setpoint_water_temp": { "default": "mdi:thermometer-water" },
@@ -73,6 +104,12 @@
       "reset_ph_container": { "default": "mdi:delete-restore" },
       "reset_chlorine_container": { "default": "mdi:delete-restore" },
       "refresh": { "default": "mdi:refresh" }
+    },
+    "binary_sensor": {
+      "filtration_running":   { "default": "mdi:pump",      "state": { "true": "mdi:pump",      "false": "mdi:pump-off" } },
+      "heating_running":      { "default": "mdi:radiator",  "state": { "true": "mdi:radiator",  "false": "mdi:radiator-off" } },
+      "lighting_on":          { "default": "mdi:lightbulb", "state": { "true": "mdi:lightbulb", "false": "mdi:lightbulb-off" } },
+      "electrolysis_running": { "default": "mdi:flash",     "state": { "true": "mdi:flash",     "false": "mdi:flash-off" } }
     }
   }
 }

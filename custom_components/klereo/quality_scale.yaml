@@ -1,10 +1,11 @@
 # Quality Scale tracking for Klereo integration
-# Target: Gold — achieved 2026-04-03
+# Target: Gold — achieved 2026-05-01
 
 rules:
   # --- Bronze (all done) ---
   action-exceptions:
     status: done
+    comment: HomeAssistantError raised in switch/select/number action methods
   config-entry-unloading:
     status: done
   config-flow:
@@ -48,11 +49,12 @@ rules:
     status: done
   parallel-updates:
     status: done
+    comment: PARALLEL_UPDATES = 0 on all 6 platform files
   reauthentication-flow:
     status: done
   test-coverage:
     status: done
-    comment: 281 tests, all platforms covered
+    comment: 314 tests, all platforms covered including binary_sensor and button
 
   # --- Gold (all done or exempt) ---
   devices:
@@ -60,7 +62,7 @@ rules:
     comment: DeviceInfo class in entity.py
   diagnostics:
     status: done
-    comment: diagnostics.py with async_redact_data
+    comment: async_get_config_entry_diagnostics with custom _redact_data redaction
   discovery:
     status: exempt
     comment: Cloud-only API — no local discovery possible
@@ -105,7 +107,7 @@ rules:
     comment: EntityDescription with translation_key on all platforms
   exception-translations:
     status: done
-    comment: English exception messages, strings.json exceptions section
+    comment: exceptions section in strings.json with translation keys
   icon-translations:
     status: done
     comment: icons.json with state variants
@@ -114,7 +116,7 @@ rules:
     comment: async_step_reconfigure for pool change
   repair-issues:
     status: done
-    comment: auth_expired and api_unreachable repair issues
+    comment: auth_expired and api_unreachable repair issues via async_create_issue
   stale-devices:
     status: done
-    comment: Devices removed after 3 consecutive absences
+    comment: Devices removed after 3 consecutive absences via device_registry

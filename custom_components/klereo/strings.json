@@ -1,4 +1,14 @@
 {
+  "issues": {
+    "auth_expired": {
+      "title": "Klereo authentication failed",
+      "description": "The Klereo API rejected your credentials. Please re-authenticate in the integration settings."
+    },
+    "api_unreachable": {
+      "title": "Klereo API unreachable",
+      "description": "Unable to connect to the Klereo API. The service may be temporarily unavailable."
+    }
+  },
   "config": {
     "step": {
       "user": {
@@ -21,6 +31,12 @@
           "username": "Username",
           "password": "Password"
         }
+      },
+      "reconfigure": {
+        "title": "Reconfigure Pool",
+        "data": {
+          "pool_id": "Pool"
+        }
       }
     },
     "error": {
@@ -32,7 +48,9 @@
     },
     "abort": {
       "already_configured": "Already configured",
-      "reauth_successful": "Re-authentication successful"
+      "reauth_successful": "Re-authentication successful",
+      "cannot_connect": "Cannot connect to Klereo API",
+      "single_pool": "Only one pool available, nothing to reconfigure"
     }
   },
   "options": {
@@ -44,6 +62,20 @@
           "update_interval": "Update interval (minutes)"
         }
       }
+    }
+  },
+  "exceptions": {
+    "set_output_failed": {
+      "message": "Failed to set output {output}"
+    },
+    "select_option_failed": {
+      "message": "Failed to set option {option}"
+    },
+    "invalid_option": {
+      "message": "Invalid option: {option}"
+    },
+    "set_value_failed": {
+      "message": "Failed to set {param} to {value}"
     }
   },
   "entity": {
@@ -85,9 +117,36 @@
       "container_days_remaining_chlorine": { "name": "Chlorine Container Days Left" }
     },
     "select": {
-      "filtration_mode": { "name": "Filtration" },
-      "lighting_mode": { "name": "Lighting" },
-      "heating_mode": { "name": "Heating Mode" }
+      "filtration_mode": {
+        "name": "Filtration",
+        "state": {
+          "off": "Off",
+          "speed_1": "Speed 1",
+          "speed_2": "Speed 2",
+          "speed_3": "Speed 3",
+          "auto": "Automatic"
+        }
+      },
+      "lighting_mode": {
+        "name": "Lighting",
+        "state": {
+          "manual_off": "Manual Off",
+          "manual_on": "Manual On",
+          "timer": "Timer",
+          "pulse": "Pulse",
+          "schedule": "Schedule",
+          "sync_filter": "Sync Filtration"
+        }
+      },
+      "heating_mode": {
+        "name": "Heating Mode",
+        "state": {
+          "off": "Off",
+          "auto": "Automatic",
+          "cooling": "Cooling",
+          "heating": "Heating"
+        }
+      }
     },
     "switch": {
       "output_lighting": { "name": "Lighting" },
@@ -120,6 +179,12 @@
       "reset_ph_container": { "name": "Reset pH- Container" },
       "reset_chlorine_container": { "name": "Reset Chlorine Container" },
       "refresh": { "name": "Refresh" }
+    },
+    "binary_sensor": {
+      "filtration_running":   { "name": "Filtration Running" },
+      "heating_running":      { "name": "Heating Running" },
+      "lighting_on":          { "name": "Lighting" },
+      "electrolysis_running": { "name": "Electrolysis Running" }
     }
   }
 }

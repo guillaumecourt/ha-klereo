@@ -120,6 +120,12 @@
       "reset_ph_container": { "name": "Reinitialiser bidon pH-" },
       "reset_chlorine_container": { "name": "Reinitialiser bidon chlore" },
       "refresh": { "name": "Rafraichir" }
+    },
+    "binary_sensor": {
+      "filtration_running":   { "name": "Filtration en cours" },
+      "heating_running":      { "name": "Chauffage en cours" },
+      "lighting_on":          { "name": "Eclairage" },
+      "electrolysis_running": { "name": "Electrolyse en cours" }
     }
   }
 }
