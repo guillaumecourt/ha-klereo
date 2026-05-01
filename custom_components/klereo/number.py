@@ -2,14 +2,18 @@
 import logging
 from typing import Any
 
+PARALLEL_UPDATES = 0
+
 from homeassistant.components.number import NumberEntity, NumberMode
 from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import (
     SETPOINT_DEFINITIONS,
+    SETPOINT_DISABLED_THRESHOLD,
     CONTAINER_TRACKING,
     OUTPUT_MODE_MANUAL,
 )
@@ -102,7 +106,7 @@ class KlereoSetpointNumber(KlereoEntity, NumberEntity):
         if raw is not None:
             try:
                 value = float(raw)
-                if value <= -1000:
+                if value <= SETPOINT_DISABLED_THRESHOLD:
                     self._attr_native_value = None
                 else:
                     self._attr_native_value = round(value, 1)
@@ -118,13 +122,18 @@ class KlereoSetpointNumber(KlereoEntity, NumberEntity):
         if success:
             await self.coordinator.async_request_refresh()
         else:
-            _LOGGER.error("Failed to set %s to %s", self._param_key, value)
+            raise HomeAssistantError(
+                translation_domain="klereo",
+                translation_key="set_value_failed",
+                translation_placeholders={"param": self._param_key, "value": str(value)},
+            )
 
 
 class KlereoPumpSpeedNumber(KlereoEntity, NumberEntity):
     """Variable speed pump control."""
 
     _attr_mode = NumberMode.SLIDER
+    _attr_native_value: float | None = None
 
     def __init__(self, coordinator, api: KlereoApi, device: dict, max_speed: int) -> None:
         super().__init__(coordinator, device)
@@ -172,7 +181,11 @@ class KlereoPumpSpeedNumber(KlereoEntity, NumberEntity):
         if success:
             await self.coordinator.async_request_refresh()
         else:
-            _LOGGER.error("Failed to set pump speed to %d", speed)
+            raise HomeAssistantError(
+                translation_domain="klereo",
+                translation_key="set_value_failed",
+                translation_placeholders={"param": "pump_speed", "value": str(speed)},
+            )
 
 
 class KlereoContainerCapacityNumber(KlereoEntity, NumberEntity):

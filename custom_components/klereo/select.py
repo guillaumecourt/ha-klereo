@@ -2,9 +2,12 @@
 import logging
 from typing import Any
 
+PARALLEL_UPDATES = 0
+
 from homeassistant.components.select import SelectEntity
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import (
@@ -20,6 +23,7 @@ from .const import (
     OUTPUT_STATE_SPEED_3,
     OUTPUT_STATE_AUTO,
     LIGHTING_FLAGS,
+    DEFAULT_OFF_DELAY_MINUTES,
     HEATING_MODE_OPTIONS,
     HEATING_MODE_TO_VALUE,
     HEATING_VALUE_TO_MODE,
@@ -32,28 +36,28 @@ _LOGGER = logging.getLogger(__name__)
 
 # --- Filtration constants ---
 FILTRATION_OUTPUT_INDEX = 1
-FILTRATION_SELECT_OPTIONS = ["Off", "Vitesse 1", "Vitesse 2", "Vitesse 3", "Automatique"]
+FILTRATION_SELECT_OPTIONS = ["off", "speed_1", "speed_2", "speed_3", "auto"]
 FILTRATION_OPTION_TO_API = {
-    "Off": {"mode": OUTPUT_MODE_MANUAL, "state": OUTPUT_STATE_OFF},
-    "Vitesse 1": {"mode": OUTPUT_MODE_MANUAL, "state": OUTPUT_STATE_ON},
-    "Vitesse 2": {"mode": OUTPUT_MODE_MANUAL, "state": OUTPUT_STATE_SCHEDULE},
-    "Vitesse 3": {"mode": OUTPUT_MODE_MANUAL, "state": OUTPUT_STATE_SPEED_3},
-    "Automatique": {"mode": OUTPUT_MODE_AUTO, "state": OUTPUT_STATE_AUTO},
+    "off": {"mode": OUTPUT_MODE_MANUAL, "state": OUTPUT_STATE_OFF},
+    "speed_1": {"mode": OUTPUT_MODE_MANUAL, "state": OUTPUT_STATE_ON},
+    "speed_2": {"mode": OUTPUT_MODE_MANUAL, "state": OUTPUT_STATE_SCHEDULE},
+    "speed_3": {"mode": OUTPUT_MODE_MANUAL, "state": OUTPUT_STATE_SPEED_3},
+    "auto": {"mode": OUTPUT_MODE_AUTO, "state": OUTPUT_STATE_AUTO},
 }
 
 # --- Lighting constants ---
 LIGHTING_OUTPUT_INDEX = 0
 LIGHTING_SELECT_OPTIONS = [
-    "Manuel Arrêt", "Manuel Marche", "Minuterie", "Impulsion",
-    "Plages Horaires", "Synchronisé Filtration",
+    "manual_off", "manual_on", "timer", "pulse",
+    "schedule", "sync_filter",
 ]
-LIGHTING_OPTION_TO_API = {
-    "Manuel Arrêt": {"api_func": "manual", "params": {"state": False}},
-    "Manuel Marche": {"api_func": "manual", "params": {"state": True}},
-    "Minuterie": {"api_func": "timer", "params": {"off_delay": 30}},
-    "Impulsion": {"api_func": "pulse", "params": {"off_delay": 30}},
-    "Plages Horaires": {"api_func": "schedule", "params": {}},
-    "Synchronisé Filtration": {"api_func": "sync_filter", "params": {}},
+LIGHTING_OPTION_TO_API: dict[str, dict[str, Any]] = {
+    "manual_off": {"api_func": "manual", "params": {"state": False}},
+    "manual_on": {"api_func": "manual", "params": {"state": True}},
+    "timer": {"api_func": "timer", "params": {"off_delay": DEFAULT_OFF_DELAY_MINUTES}},
+    "pulse": {"api_func": "pulse", "params": {"off_delay": DEFAULT_OFF_DELAY_MINUTES}},
+    "schedule": {"api_func": "schedule", "params": {}},
+    "sync_filter": {"api_func": "sync_filter", "params": {}},
 }
 LIGHTING_TIMER_FLAGS = {"custom_flags": 6721, "other_flags": 0}
 LIGHTING_PULSE_FLAGS = {"custom_flags": 6721, "other_flags": 0}
@@ -117,22 +121,26 @@ class KlereoFiltrationSelect(KlereoEntity, SelectEntity):
 
     async def async_select_option(self, option: str) -> None:
         if option not in FILTRATION_OPTION_TO_API:
-            _LOGGER.error("Invalid filtration option: %s", option)
-            return
+            raise HomeAssistantError(
+                translation_domain="klereo",
+                translation_key="invalid_option",
+                translation_placeholders={"option": option},
+            )
         params = FILTRATION_OPTION_TO_API[option]
         _LOGGER.info("Filtration Select: selected '%s'", option)
-        try:
-            success = await self.api.async_set_output_mode_and_state(
-                output_index=FILTRATION_OUTPUT_INDEX,
-                mode=params["mode"],
-                state=params["state"],
+        success = await self.api.async_set_output_mode_and_state(
+            output_index=FILTRATION_OUTPUT_INDEX,
+            mode=params["mode"],
+            state=params["state"],
+        )
+        if success:
+            await self.coordinator.async_request_refresh()
+        else:
+            raise HomeAssistantError(
+                translation_domain="klereo",
+                translation_key="select_option_failed",
+                translation_placeholders={"option": option},
             )
-            if success:
-                await self.coordinator.async_request_refresh()
-            else:
-                _LOGGER.error("API call failed for filtration option '%s'", option)
-        except Exception as e:
-            _LOGGER.error("Error setting filtration option '%s': %s", option, e)
 
     @callback
     def _handle_coordinator_update(self) -> None:
@@ -157,16 +165,16 @@ class KlereoFiltrationSelect(KlereoEntity, SelectEntity):
             current_mode = current_state = None
 
         if current_mode == OUTPUT_MODE_AUTO:
-            current_option = "Automatique"
+            current_option = "auto"
         elif current_mode == OUTPUT_MODE_MANUAL:
             if current_state == OUTPUT_STATE_OFF:
-                current_option = "Off"
+                current_option = "off"
             elif current_state == OUTPUT_STATE_ON:
-                current_option = "Vitesse 1"
+                current_option = "speed_1"
             elif current_state == OUTPUT_STATE_SCHEDULE:
-                current_option = "Vitesse 2"
+                current_option = "speed_2"
             elif current_state == OUTPUT_STATE_SPEED_3:
-                current_option = "Vitesse 3"
+                current_option = "speed_3"
 
         if current_option not in FILTRATION_SELECT_OPTIONS:
             current_option = None
@@ -192,8 +200,11 @@ class KlereoLightingSelect(KlereoEntity, SelectEntity):
 
     async def async_select_option(self, option: str) -> None:
         if option not in LIGHTING_OPTION_TO_API:
-            _LOGGER.error("Invalid lighting option: %s", option)
-            return
+            raise HomeAssistantError(
+                translation_domain="klereo",
+                translation_key="invalid_option",
+                translation_placeholders={"option": option},
+            )
 
         command_info = LIGHTING_OPTION_TO_API[option]
         api_func_name = command_info["api_func"]
@@ -202,50 +213,51 @@ class KlereoLightingSelect(KlereoEntity, SelectEntity):
 
         _LOGGER.info("Lighting Select: selected '%s'", option)
 
-        try:
-            if api_func_name == "manual":
+        if api_func_name == "manual":
+            success = await self.api.async_set_output_mode_and_state(
+                output_index=LIGHTING_OUTPUT_INDEX,
+                mode=OUTPUT_MODE_MANUAL,
+                state=(OUTPUT_STATE_ON if params["state"] else OUTPUT_STATE_OFF),
+            )
+        elif api_func_name == "timer":
+            step1_ok = await self.api.async_set_output_auto_off(LIGHTING_OUTPUT_INDEX, params["off_delay"])
+            if step1_ok:
                 success = await self.api.async_set_output_mode_and_state(
                     output_index=LIGHTING_OUTPUT_INDEX,
-                    mode=OUTPUT_MODE_MANUAL,
-                    state=(OUTPUT_STATE_ON if params["state"] else OUTPUT_STATE_OFF),
-                )
-            elif api_func_name == "timer":
-                step1_ok = await self.api.async_set_output_auto_off(LIGHTING_OUTPUT_INDEX, params["off_delay"])
-                if step1_ok:
-                    success = await self.api.async_set_output_mode_and_state(
-                        output_index=LIGHTING_OUTPUT_INDEX,
-                        mode=OUTPUT_MODE_TIMER,
-                        state=OUTPUT_STATE_ON,
-                        **LIGHTING_TIMER_FLAGS,
-                    )
-            elif api_func_name == "pulse":
-                step1_ok = await self.api.async_set_output_auto_off(LIGHTING_OUTPUT_INDEX, params["off_delay"])
-                if step1_ok:
-                    success = await self.api.async_set_output_mode_and_state(
-                        output_index=LIGHTING_OUTPUT_INDEX,
-                        mode=OUTPUT_MODE_PULSE,
-                        state=OUTPUT_STATE_ON,
-                        **LIGHTING_PULSE_FLAGS,
-                    )
-            elif api_func_name == "schedule":
-                success = await self.api.async_set_output_mode_and_state(
-                    output_index=LIGHTING_OUTPUT_INDEX,
-                    mode=OUTPUT_MODE_SCHEDULE,
-                    state=OUTPUT_STATE_SCHEDULE,
-                )
-            elif api_func_name == "sync_filter":
-                success = await self.api.async_set_output_mode_and_state(
-                    output_index=LIGHTING_OUTPUT_INDEX,
-                    mode=OUTPUT_MODE_SYNC_FILTER,
+                    mode=OUTPUT_MODE_TIMER,
                     state=OUTPUT_STATE_ON,
+                    **LIGHTING_TIMER_FLAGS,
                 )
+        elif api_func_name == "pulse":
+            step1_ok = await self.api.async_set_output_auto_off(LIGHTING_OUTPUT_INDEX, params["off_delay"])
+            if step1_ok:
+                success = await self.api.async_set_output_mode_and_state(
+                    output_index=LIGHTING_OUTPUT_INDEX,
+                    mode=OUTPUT_MODE_PULSE,
+                    state=OUTPUT_STATE_ON,
+                    **LIGHTING_PULSE_FLAGS,
+                )
+        elif api_func_name == "schedule":
+            success = await self.api.async_set_output_mode_and_state(
+                output_index=LIGHTING_OUTPUT_INDEX,
+                mode=OUTPUT_MODE_SCHEDULE,
+                state=OUTPUT_STATE_SCHEDULE,
+            )
+        elif api_func_name == "sync_filter":
+            success = await self.api.async_set_output_mode_and_state(
+                output_index=LIGHTING_OUTPUT_INDEX,
+                mode=OUTPUT_MODE_SYNC_FILTER,
+                state=OUTPUT_STATE_ON,
+            )
 
-            if success:
-                await self.coordinator.async_request_refresh()
-            else:
-                _LOGGER.error("API call failed for lighting option '%s'", option)
-        except Exception as e:
-            _LOGGER.error("Error setting lighting option '%s': %s", option, e)
+        if success:
+            await self.coordinator.async_request_refresh()
+        else:
+            raise HomeAssistantError(
+                translation_domain="klereo",
+                translation_key="select_option_failed",
+                translation_placeholders={"option": option},
+            )
 
     @callback
     def _handle_coordinator_update(self) -> None:
@@ -271,17 +283,17 @@ class KlereoLightingSelect(KlereoEntity, SelectEntity):
 
         if current_mode == OUTPUT_MODE_MANUAL:
             if current_state == OUTPUT_STATE_OFF:
-                current_option = "Manuel Arrêt"
+                current_option = "manual_off"
             elif current_state == OUTPUT_STATE_ON:
-                current_option = "Manuel Marche"
+                current_option = "manual_on"
         elif current_mode == OUTPUT_MODE_TIMER:
-            current_option = "Minuterie"
+            current_option = "timer"
         elif current_mode == OUTPUT_MODE_PULSE:
-            current_option = "Impulsion"
+            current_option = "pulse"
         elif current_mode == OUTPUT_MODE_SCHEDULE:
-            current_option = "Plages Horaires"
+            current_option = "schedule"
         elif current_mode == OUTPUT_MODE_SYNC_FILTER:
-            current_option = "Synchronisé Filtration"
+            current_option = "sync_filter"
 
         if current_option not in LIGHTING_SELECT_OPTIONS:
             current_option = None
@@ -307,19 +319,23 @@ class KlereoHeatingModeSelect(KlereoEntity, SelectEntity):
 
     async def async_select_option(self, option: str) -> None:
         if option not in HEATING_MODE_TO_VALUE:
-            _LOGGER.error("Invalid heating mode option: %s", option)
-            return
+            raise HomeAssistantError(
+                translation_domain="klereo",
+                translation_key="invalid_option",
+                translation_placeholders={"option": option},
+            )
 
         _LOGGER.info("Heating Mode Select: selected '%s'", option)
         value = HEATING_MODE_TO_VALUE[option]
-        try:
-            success = await self.api.async_set_param("HeaterMode", value)
-            if success:
-                await self.coordinator.async_request_refresh()
-            else:
-                _LOGGER.error("API call failed for heating mode '%s'", option)
-        except Exception as e:
-            _LOGGER.error("Error setting heating mode '%s': %s", option, e)
+        success = await self.api.async_set_param("HeaterMode", value)
+        if success:
+            await self.coordinator.async_request_refresh()
+        else:
+            raise HomeAssistantError(
+                translation_domain="klereo",
+                translation_key="select_option_failed",
+                translation_placeholders={"option": option},
+            )
 
     @callback
     def _handle_coordinator_update(self) -> None:

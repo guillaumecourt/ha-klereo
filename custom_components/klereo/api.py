@@ -115,7 +115,7 @@ class KlereoApi:
         self.hashed_password = hash_password(password)
         self.base_url = BASE_URL
         self.session = aiohttp_client.async_get_clientsession(hass)
-        self.jwt_token = None
+        self.jwt_token: str | None = None
         self.pool_id = pool_id
         self._last_token_failure: float = 0.0
         self._TOKEN_COOLDOWN = 30  # seconds

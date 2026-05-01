@@ -120,3 +120,14 @@ rules:
   stale-devices:
     status: done
     comment: Devices removed after 3 consecutive absences via device_registry
+
+  # --- Platinum (all done) ---
+  async-dependency:
+    status: done
+    comment: aiohttp only, all network calls async, no blocking I/O
+  inject-websession:
+    status: done
+    comment: async_get_clientsession(hass) injected in KlereoApi.__init__, no-op close
+  strict-typing:
+    status: done
+    comment: mypy passes with ignore_missing_imports; 22 errors resolved via dict type annotations

@@ -9,7 +9,7 @@ from .api import KlereoApi
 _LOGGER = logging.getLogger(__name__)
 
 
-class KlereoConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
+class KlereoConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: ignore[call-arg]
     """Handle a config flow for Klereo."""
 
     VERSION = 2
@@ -45,7 +45,7 @@ class KlereoConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     else:
                         _LOGGER.error("Klereo API error: %s", e)
                         errors["base"] = "api_error"
-                except Exception as e:
+                except (aiohttp.ClientError, ValueError, KeyError) as e:
                     _LOGGER.exception("Unexpected error during authentication: %s", e)
                     errors["base"] = "unknown_error"
                 else:
@@ -56,7 +56,7 @@ class KlereoConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     # Discover pools
                     try:
                         self._pools = await api.async_get_pools()
-                    except Exception as err:
+                    except (aiohttp.ClientError, ValueError, KeyError) as err:
                         _LOGGER.warning("Failed to discover pools: %s", err)
                         self._pools = []
 
@@ -140,7 +140,7 @@ class KlereoConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     errors["base"] = "invalid_auth"
                 else:
                     errors["base"] = "api_error"
-            except Exception:
+            except (aiohttp.ClientError, ValueError, KeyError):
                 errors["base"] = "unknown_error"
             else:
                 return self.async_update_reload_and_abort(
@@ -154,6 +154,48 @@ class KlereoConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 {
                     vol.Required("username"): str,
                     vol.Required("password"): str,
+                }
+            ),
+            errors=errors,
+        )
+
+    async def async_step_reconfigure(self, user_input=None):
+        """Handle reconfiguration to change pool selection."""
+        entry = self._get_reconfigure_entry()
+        errors = {}
+
+        if user_input is not None:
+            selected_pool_id = user_input[CONF_POOL_ID]
+            pool = next((p for p in self._pools if p["id"] == selected_pool_id), None)
+            pool_name = pool["name"] if pool else f"Pool {selected_pool_id}"
+
+            return self.async_update_reload_and_abort(
+                entry,
+                data_updates={
+                    CONF_POOL_ID: selected_pool_id,
+                    CONF_POOL_NAME: pool_name,
+                },
+            )
+
+        # Discover pools using existing credentials
+        try:
+            api = KlereoApi(self.hass, entry.data["username"], entry.data["password"])
+            await api.async_get_token()
+            self._pools = await api.async_get_pools()
+        except (aiohttp.ClientError, ValueError, KeyError) as err:
+            _LOGGER.error("Failed to discover pools during reconfigure: %s", err)
+            return self.async_abort(reason="cannot_connect")
+
+        if len(self._pools) <= 1:
+            return self.async_abort(reason="single_pool")
+
+        pool_options = {p["id"]: p["name"] for p in self._pools}
+        current_pool_id = entry.data.get(CONF_POOL_ID)
+        return self.async_show_form(
+            step_id="reconfigure",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_POOL_ID, default=current_pool_id): vol.In(pool_options),
                 }
             ),
             errors=errors,
@@ -188,7 +230,7 @@ class KlereoOptionsFlowHandler(config_entries.OptionsFlow):
                         errors["base"] = "invalid_auth"
                     else:
                         errors["base"] = "api_error"
-                except Exception:
+                except (aiohttp.ClientError, ValueError, KeyError):
                     errors["base"] = "unknown_error"
 
             if not errors:

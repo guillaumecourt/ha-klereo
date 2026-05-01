@@ -5,10 +5,10 @@
   "issue_tracker": "https://github.com/guillaumecourt/ha-klereo/issues",
   "dependencies": [],
   "codeowners": ["@guillaumecourt"],
-  "version": "0.2.1",
+  "version": "0.3.0",
   "requirements": ["beautifulsoup4==4.12.2"],
   "config_flow": true,
   "iot_class": "cloud_polling",
   "integration_type": "hub",
-  "quality_scale": "gold"
+  "quality_scale": "platinum"
 }

@@ -2,6 +2,8 @@
 import logging
 from typing import Any
 
+PARALLEL_UPDATES = 0
+
 from homeassistant.components.sensor import (
     SensorEntity,
     SensorStateClass,
@@ -12,7 +14,7 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import PROBE_TYPES, CALCULATED_SENSORS, STATUS_SENSORS, CONTAINER_TRACKING, ALERT_CODES
+from .const import PROBE_TYPES, CALCULATED_SENSORS, STATUS_SENSORS, CONTAINER_TRACKING, ALERT_CODES, VOLUME_DIVISOR
 from .entity import KlereoEntity
 
 _LOGGER = logging.getLogger(__name__)
@@ -138,7 +140,7 @@ class KlereoProbeSensor(KlereoEntity, SensorEntity):
         self._probe = probe
         self._probe_index = probe.get("index", "N/A")
         probe_type = probe.get("type")
-        probe_details = PROBE_TYPES[probe_type]
+        probe_details = PROBE_TYPES[probe_type]  # type: ignore[index]
 
         self._attr_translation_key = probe_details["id_key"]
         if suffix:
@@ -226,7 +228,7 @@ class KlereoCalculatedSensor(KlereoEntity, SensorEntity):
                     debit = float(debit_raw)
                     time_val = float(time_raw)
                     digits = self._sensor_def.get("round_digits", 2)
-                    new_value = round((debit / 36000.0) * time_val, digits) if debit > 0 else 0.0
+                    new_value = round((debit / VOLUME_DIVISOR) * time_val, digits) if debit > 0 else 0.0
 
             elif formula == "time_hours":
                 time_raw = params.get(self._sensor_def["time_key"])
@@ -260,6 +262,9 @@ class KlereoStatusSensor(KlereoEntity, SensorEntity):
 
         self._attr_translation_key = status_def["id_key"]
         self._attr_unique_id = f"{self._device_id}_{status_def['id_key']}"
+
+        if not status_def.get("enabled_default", True):
+            self._attr_entity_registry_enabled_default = False
 
         self._update_state()
 
@@ -329,7 +334,7 @@ def _compute_volume(params: dict, debit_key: str, time_key: str) -> float | None
     try:
         debit = float(debit_raw)
         time_val = float(time_raw)
-        return (debit / 36000.0) * time_val if debit > 0 else 0.0
+        return (debit / VOLUME_DIVISOR) * time_val if debit > 0 else 0.0
     except (ValueError, TypeError):
         return None
 
@@ -391,11 +396,10 @@ class KlereoContainerDaysRemainingSensor(KlereoEntity, SensorEntity):
         self.async_write_ha_state()
 
     def _update_state(self) -> None:
-        from datetime import datetime, timezone
+        from datetime import datetime, timezone, date
 
         params = self._get_params()
         volume_total = _compute_volume(params, self._ct_def["debit_key"], self._ct_def["total_time_key"])
-        volume_today = _compute_volume(params, self._ct_def["debit_key"], self._ct_def["today_time_key"])
         if volume_total is None:
             self._attr_native_value = None
             return
@@ -407,21 +411,24 @@ class KlereoContainerDaysRemainingSensor(KlereoEntity, SensorEntity):
         remaining = capacity - (volume_total - reset_at)
 
         if remaining <= 0:
-            self._attr_native_value = 0
+            self._attr_native_value = 0.0
             return
 
-        # 7-day sliding average from daily history
+        # Rolling average over completed days only.
+        # The last entry of daily_history is the in-progress day (cumulative
+        # since midnight). Excluding it prevents a partial cumul from biasing
+        # the average and causing intra-day sawtooth on the resulting estimate.
         history_key = f"{self._ct_key}_daily_history"
         history = options.get(history_key, [])
-        avg_7d = None
-        if len(history) >= 3:
-            volumes = [entry["volume"] for entry in history if "volume" in entry]
-            if volumes:
-                avg_7d = sum(volumes) / len(volumes)
+        today_str = date.today().isoformat()
+        completed = [e for e in history if e.get("date") != today_str and "volume" in e]
+        avg_completed = None
+        if completed:
+            avg_completed = sum(e["volume"] for e in completed) / len(completed)
 
-        # Fallback: long-term average from installDate
+        # Fallback: long-term average from installDate when no completed day yet.
         avg_long_term = None
-        if avg_7d is None:
+        if avg_completed is None:
             device_data = self._get_device_data()
             install_ts = device_data.get("installDate") if device_data else None
             if install_ts:
@@ -433,17 +440,11 @@ class KlereoContainerDaysRemainingSensor(KlereoEntity, SensorEntity):
                 except (ValueError, TypeError, OSError):
                     pass
 
-        baseline = avg_7d if avg_7d is not None else avg_long_term
+        daily_rate = avg_completed if avg_completed is not None else avg_long_term
 
-        # Weighted average: 70% today + 30% baseline
-        if volume_today and volume_today > 0 and baseline and baseline > 0:
-            weighted_avg = 0.7 * volume_today + 0.3 * baseline
-        elif baseline and baseline > 0:
-            weighted_avg = baseline
-        elif volume_today and volume_today > 0:
-            weighted_avg = volume_today
-        else:
+        # Negligible / unknown rate → return None rather than 9999d aberrations.
+        if not daily_rate or daily_rate < 0.01:
             self._attr_native_value = None
             return
 
-        self._attr_native_value = round(remaining / weighted_avg, 1)
+        self._attr_native_value = round(remaining / daily_rate, 1)

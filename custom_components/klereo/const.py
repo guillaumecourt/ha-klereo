@@ -1,12 +1,25 @@
 """Constants for the Klereo integration."""
+from typing import Any
+
 from homeassistant.const import Platform
 
 DOMAIN = "klereo"
-PLATFORMS = [Platform.SENSOR, Platform.SELECT, Platform.SWITCH, Platform.NUMBER, Platform.BUTTON]
+PLATFORMS = [Platform.BINARY_SENSOR, Platform.SENSOR, Platform.SELECT, Platform.SWITCH, Platform.NUMBER, Platform.BUTTON]
 
 # --- Config flow constants ---
 CONF_POOL_ID = "pool_id"
 CONF_POOL_NAME = "pool_name"
+
+# Volume formula divisor: Klereo API returns debit in cL/h, time in seconds.
+# volume_liters = (debit_cL_per_h / 36000) * time_seconds
+# 36000 = 100 (cL→L) * 3600 (h→s) / 10 (internal scaling)
+VOLUME_DIVISOR = 36000.0
+
+# Setpoint sentinel: API returns -1000 or -2000 when a setpoint is disabled/inactive
+SETPOINT_DISABLED_THRESHOLD = -1000
+
+# Default off delay in minutes for timer/pulse lighting modes
+DEFAULT_OFF_DELAY_MINUTES = 30
 
 # --- API Endpoints ---
 BASE_URL = "https://connect.klereo.fr"
@@ -34,6 +47,7 @@ OUTPUT_STATE_SPEED_3 = 3
 OUTPUT_STATE_AUTO = 15
 
 # --- Lighting flags ---
+# 6721 = Klereo web app custom flags for timer/pulse lighting modes (reverse-engineered)
 LIGHTING_FLAGS = {"custFlags": 6721, "otherFlags": 0}
 
 # --- Output type names (16 types, index-based) ---
@@ -58,7 +72,7 @@ OUTPUT_NAMES = {
 
 # --- Probe types (14 types matching ha-klereo) ---
 # type_id -> {name, id_key, unit, icon, state_class, device_class}
-PROBE_TYPES = {
+PROBE_TYPES: dict[int, dict[str, Any]] = {
     0: {
         "name": "Tech Room Temp",
         "id_key": "tech_room_temp",
@@ -166,7 +180,7 @@ PROBE_TYPES = {
 # --- Calculated sensor definitions ---
 # key -> {name, id_key, unit, icon, state_class, device_class, formula}
 # formula: "debit_time" = (debit/36000)*time, "time_hours" = seconds/3600, "param_direct" = raw param value, "gram_production" = value/1000
-CALCULATED_SENSORS = {
+CALCULATED_SENSORS: dict[str, dict[str, Any]] = {
     "ph_volume_today": {
         "name": "pH Volume Today",
         "id_key": "ph_volume_today",
@@ -299,6 +313,7 @@ STATUS_SENSORS = {
         "name": "Pool Mode",
         "id_key": "pool_mode",
         "icon": "mdi:pool",
+        "enabled_default": False,
         "value_map": {
             0: "Stop",
             1: "Summer",
@@ -310,6 +325,7 @@ STATUS_SENSORS = {
         "name": "Treatment Mode",
         "id_key": "treatment_mode",
         "icon": "mdi:water-plus",
+        "enabled_default": False,
         "value_map": {
             0: "Stop",
             1: "Auto",
@@ -321,6 +337,7 @@ STATUS_SENSORS = {
         "name": "pH Mode",
         "id_key": "ph_mode",
         "icon": "mdi:ph",
+        "enabled_default": False,
         "value_map": {
             0: "Stop",
             1: "Auto",
@@ -331,6 +348,7 @@ STATUS_SENSORS = {
         "name": "Heater Mode",
         "id_key": "heater_mode",
         "icon": "mdi:radiator",
+        "enabled_default": False,
         "value_map": {
             0: "Stop",
             1: "Auto",
@@ -342,7 +360,7 @@ STATUS_SENSORS = {
 
 # --- Setpoint definitions ---
 # param_key -> {name, id_key, unit, min, max, step, icon}
-SETPOINT_DEFINITIONS = {
+SETPOINT_DEFINITIONS: dict[str, dict[str, Any]] = {
     "ConsigneEau": {
         "name": "Water Temp Setpoint",
         "id_key": "setpoint_water_temp",
@@ -402,12 +420,12 @@ OUTPUT_TRANSLATION_KEYS = {
 }
 
 # --- Heating mode constants ---
-HEATING_MODE_OPTIONS = ["Arrêt", "Automatique", "Refroidissement", "Chauffage"]
+HEATING_MODE_OPTIONS = ["off", "auto", "cooling", "heating"]
 HEATING_MODE_TO_VALUE = {
-    "Arrêt": 0,
-    "Automatique": 1,
-    "Refroidissement": 2,
-    "Chauffage": 3,
+    "off": 0,
+    "auto": 1,
+    "cooling": 2,
+    "heating": 3,
 }
 HEATING_VALUE_TO_MODE = {v: k for k, v in HEATING_MODE_TO_VALUE.items()}
 HEATING_OUTPUT_INDEX = 6
@@ -434,7 +452,7 @@ ALERT_CODES = {
 }
 
 # --- Container tracking definitions (for reset buttons) ---
-CONTAINER_TRACKING = {
+CONTAINER_TRACKING: dict[str, dict[str, Any]] = {
     "ph_minus": {
         "id_key": "reset_ph_container",
         "debit_key": "PHMinus_Debit",
