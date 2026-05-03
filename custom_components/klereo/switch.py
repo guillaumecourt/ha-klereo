@@ -1,10 +1,14 @@
 """Switch platform for the Klereo integration."""
 import logging
+from dataclasses import dataclass
 from typing import Any
 
-from homeassistant.components.switch import SwitchEntity
+PARALLEL_UPDATES = 0
+
+from homeassistant.components.switch import SwitchEntity, SwitchEntityDescription
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import (
@@ -18,6 +22,13 @@ from .entity import KlereoEntity
 from .api import KlereoApi
 
 _LOGGER = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True, kw_only=True)
+class KlereoSwitchDescription(SwitchEntityDescription):
+    """Switch entity description for a Klereo output."""
+
+    output_index: int
 
 
 async def async_setup_entry(
@@ -43,7 +54,12 @@ async def async_setup_entry(
         for output in device.get("outs", []):
             output_index = output.get("index")
             if output_index is not None:
-                switches.append(KlereoOutputSwitch(coordinator, api, device, output_index))
+                description = KlereoSwitchDescription(
+                    key=f"switch_out{output_index}",
+                    translation_key=OUTPUT_TRANSLATION_KEYS.get(output_index, f"output_{output_index}"),
+                    output_index=output_index,
+                )
+                switches.append(KlereoOutputSwitch(coordinator, api, device, description))
 
     if switches:
         async_add_entities(switches)
@@ -55,12 +71,14 @@ async def async_setup_entry(
 class KlereoOutputSwitch(KlereoEntity, SwitchEntity):
     """Switch for a Klereo output."""
 
-    def __init__(self, coordinator, api: KlereoApi, device: dict, output_index: int) -> None:
+    entity_description: KlereoSwitchDescription
+
+    def __init__(self, coordinator, api: KlereoApi, device: dict, description: KlereoSwitchDescription) -> None:
         super().__init__(coordinator, device)
         self.api = api
-        self._output_index = output_index
-        self._attr_translation_key = OUTPUT_TRANSLATION_KEYS.get(output_index, f"output_{output_index}")
-        self._attr_unique_id = f"{self._device_id}_switch_out{output_index}"
+        self.entity_description = description
+        self._output_index = description.output_index
+        self._attr_unique_id = f"{self._device_id}_switch_out{description.output_index}"
 
         self._update_state()
 
@@ -79,7 +97,11 @@ class KlereoOutputSwitch(KlereoEntity, SwitchEntity):
         if success:
             await self.coordinator.async_request_refresh()
         else:
-            _LOGGER.error("Failed to turn on output %d", self._output_index)
+            raise HomeAssistantError(
+                translation_domain="klereo",
+                translation_key="set_output_failed",
+                translation_placeholders={"output": str(self._output_index)},
+            )
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn off the output."""
@@ -92,7 +114,11 @@ class KlereoOutputSwitch(KlereoEntity, SwitchEntity):
         if success:
             await self.coordinator.async_request_refresh()
         else:
-            _LOGGER.error("Failed to turn off output %d", self._output_index)
+            raise HomeAssistantError(
+                translation_domain="klereo",
+                translation_key="set_output_failed",
+                translation_placeholders={"output": str(self._output_index)},
+            )
 
     @callback
     def _handle_coordinator_update(self) -> None:
@@ -101,15 +127,4 @@ class KlereoOutputSwitch(KlereoEntity, SwitchEntity):
 
     def _update_state(self) -> None:
         """Determine on/off state from output status."""
-        output_data = self._get_output_data(self._output_index)
-        if output_data is None:
-            self._attr_is_on = None
-            return
-        status = output_data.get("status")
-        if status is not None:
-            try:
-                self._attr_is_on = int(status) != 0
-            except (ValueError, TypeError):
-                self._attr_is_on = None
-        else:
-            self._attr_is_on = None
+        self._attr_is_on = self._output_is_on(self._output_index)

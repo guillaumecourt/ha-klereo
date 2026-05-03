@@ -1,10 +1,11 @@
 """Select platform for the Klereo integration."""
 import logging
+from dataclasses import dataclass
 from typing import Any
 
 PARALLEL_UPDATES = 0
 
-from homeassistant.components.select import SelectEntity
+from homeassistant.components.select import SelectEntity, SelectEntityDescription
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.exceptions import HomeAssistantError
@@ -63,6 +64,28 @@ LIGHTING_TIMER_FLAGS = {"custom_flags": 6721, "other_flags": 0}
 LIGHTING_PULSE_FLAGS = {"custom_flags": 6721, "other_flags": 0}
 
 
+@dataclass(frozen=True, kw_only=True)
+class KlereoSelectDescription(SelectEntityDescription):
+    """Select entity description for a Klereo select control."""
+
+
+FILTRATION_SELECT_DESCRIPTION = KlereoSelectDescription(
+    key="filtration_mode",
+    translation_key="filtration_mode",
+    options=FILTRATION_SELECT_OPTIONS,
+)
+LIGHTING_SELECT_DESCRIPTION = KlereoSelectDescription(
+    key="lighting_mode",
+    translation_key="lighting_mode",
+    options=LIGHTING_SELECT_OPTIONS,
+)
+HEATING_MODE_SELECT_DESCRIPTION = KlereoSelectDescription(
+    key="heating_mode",
+    translation_key="heating_mode",
+    options=HEATING_MODE_OPTIONS,
+)
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: ConfigEntry,
@@ -85,15 +108,15 @@ async def async_setup_entry(
 
         # Filtration select
         if any(out.get("index") == FILTRATION_OUTPUT_INDEX for out in outputs):
-            select_entities.append(KlereoFiltrationSelect(coordinator, api, device))
+            select_entities.append(KlereoFiltrationSelect(coordinator, api, device, FILTRATION_SELECT_DESCRIPTION))
 
         # Lighting select
         if any(out.get("index") == LIGHTING_OUTPUT_INDEX for out in outputs):
-            select_entities.append(KlereoLightingSelect(coordinator, api, device))
+            select_entities.append(KlereoLightingSelect(coordinator, api, device, LIGHTING_SELECT_DESCRIPTION))
 
         # Heating mode select
         if any(out.get("index") == HEATING_OUTPUT_INDEX for out in outputs):
-            select_entities.append(KlereoHeatingModeSelect(coordinator, api, device))
+            select_entities.append(KlereoHeatingModeSelect(coordinator, api, device, HEATING_MODE_SELECT_DESCRIPTION))
 
     if select_entities:
         _LOGGER.info("Adding %d Klereo select entities", len(select_entities))
@@ -105,13 +128,13 @@ async def async_setup_entry(
 class KlereoFiltrationSelect(KlereoEntity, SelectEntity):
     """Filtration control select entity."""
 
-    def __init__(self, coordinator, api: KlereoApi, device: dict) -> None:
+    entity_description: KlereoSelectDescription
+
+    def __init__(self, coordinator, api: KlereoApi, device: dict, description: KlereoSelectDescription) -> None:
         super().__init__(coordinator, device)
         self.api = api
-
-        self._attr_translation_key = "filtration_mode"
+        self.entity_description = description
         self._attr_unique_id = f"{self._device_id}_filtration_mode_out{FILTRATION_OUTPUT_INDEX}"
-        self._attr_options = FILTRATION_SELECT_OPTIONS
 
         self._update_state()
 
@@ -184,13 +207,13 @@ class KlereoFiltrationSelect(KlereoEntity, SelectEntity):
 class KlereoLightingSelect(KlereoEntity, SelectEntity):
     """Lighting control select entity."""
 
-    def __init__(self, coordinator, api: KlereoApi, device: dict) -> None:
+    entity_description: KlereoSelectDescription
+
+    def __init__(self, coordinator, api: KlereoApi, device: dict, description: KlereoSelectDescription) -> None:
         super().__init__(coordinator, device)
         self.api = api
-
-        self._attr_translation_key = "lighting_mode"
+        self.entity_description = description
         self._attr_unique_id = f"{self._device_id}_lighting_mode_out{LIGHTING_OUTPUT_INDEX}"
-        self._attr_options = LIGHTING_SELECT_OPTIONS
 
         self._update_state()
 
@@ -303,13 +326,13 @@ class KlereoLightingSelect(KlereoEntity, SelectEntity):
 class KlereoHeatingModeSelect(KlereoEntity, SelectEntity):
     """Heating mode control select entity."""
 
-    def __init__(self, coordinator, api: KlereoApi, device: dict) -> None:
+    entity_description: KlereoSelectDescription
+
+    def __init__(self, coordinator, api: KlereoApi, device: dict, description: KlereoSelectDescription) -> None:
         super().__init__(coordinator, device)
         self.api = api
-
-        self._attr_translation_key = "heating_mode"
+        self.entity_description = description
         self._attr_unique_id = f"{self._device_id}_heating_mode"
-        self._attr_options = HEATING_MODE_OPTIONS
 
         self._update_state()
 

@@ -1,10 +1,11 @@
 """Number platform for the Klereo integration."""
 import logging
+from dataclasses import dataclass
 from typing import Any
 
 PARALLEL_UPDATES = 0
 
-from homeassistant.components.number import NumberEntity, NumberMode
+from homeassistant.components.number import NumberEntity, NumberEntityDescription, NumberMode
 from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.config_entries import ConfigEntry
@@ -21,6 +22,50 @@ from .entity import KlereoEntity
 from .api import KlereoApi
 
 _LOGGER = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True, kw_only=True)
+class KlereoSetpointDescription(NumberEntityDescription):
+    """Number entity description for a Klereo setpoint."""
+
+    param_key: str
+
+
+SETPOINT_DESCRIPTIONS: tuple[KlereoSetpointDescription, ...] = tuple(
+    KlereoSetpointDescription(
+        key=sdef["id_key"],
+        translation_key=sdef["id_key"],
+        param_key=param_key,
+        native_unit_of_measurement=sdef.get("unit"),
+        native_min_value=sdef.get("min", 0),
+        native_max_value=sdef.get("max", 100),
+        native_step=sdef.get("step", 1),
+    )
+    for param_key, sdef in SETPOINT_DEFINITIONS.items()
+)
+
+
+@dataclass(frozen=True, kw_only=True)
+class KlereoCapacityDescription(NumberEntityDescription):
+    """Number entity description for a Klereo container capacity."""
+
+    capacity_option: str
+    capacity_default: float
+
+
+CAPACITY_DESCRIPTIONS: tuple[KlereoCapacityDescription, ...] = tuple(
+    KlereoCapacityDescription(
+        key=f"capacity_{ct_key}",
+        translation_key=f"capacity_{ct_key}",
+        capacity_option=ct_def["capacity_option"],
+        capacity_default=ct_def["capacity_default"],
+        native_unit_of_measurement="L",
+        native_min_value=ct_def.get("capacity_min", 1.0),
+        native_max_value=ct_def.get("capacity_max", 200.0),
+        native_step=ct_def.get("capacity_step", 0.5),
+    )
+    for ct_key, ct_def in CONTAINER_TRACKING.items()
+)
 
 
 async def async_setup_entry(
@@ -48,15 +93,13 @@ async def async_setup_entry(
             continue
 
         # Setpoint numbers
-        for param_key, setpoint_def in SETPOINT_DEFINITIONS.items():
-            if param_key in params:
-                numbers.append(KlereoSetpointNumber(coordinator, api, device, param_key, setpoint_def))
+        for desc in SETPOINT_DESCRIPTIONS:
+            if desc.param_key in params:
+                numbers.append(KlereoSetpointNumber(coordinator, api, device, desc))
 
         # Container capacity numbers
-        for ct_key, ct_def in CONTAINER_TRACKING.items():
-            numbers.append(
-                KlereoContainerCapacityNumber(coordinator, device, ct_key, ct_def)
-            )
+        for desc in CAPACITY_DESCRIPTIONS:
+            numbers.append(KlereoContainerCapacityNumber(coordinator, device, desc))
 
         # Variable speed pump
         pump_max_speed = params.get("PumpMaxSpeed")
@@ -76,22 +119,17 @@ async def async_setup_entry(
 
 
 class KlereoSetpointNumber(KlereoEntity, NumberEntity):
-    """Setpoint number entity driven by SETPOINT_DEFINITIONS."""
+    """Setpoint number entity driven by SETPOINT_DESCRIPTIONS."""
 
     _attr_mode = NumberMode.BOX
+    entity_description: KlereoSetpointDescription
 
-    def __init__(self, coordinator, api: KlereoApi, device: dict, param_key: str, setpoint_def: dict) -> None:
+    def __init__(self, coordinator, api: KlereoApi, device: dict, description: KlereoSetpointDescription) -> None:
         super().__init__(coordinator, device)
         self.api = api
-        self._param_key = param_key
-        self._setpoint_def = setpoint_def
-
-        self._attr_translation_key = setpoint_def["id_key"]
-        self._attr_unique_id = f"{self._device_id}_{setpoint_def['id_key']}"
-        self._attr_native_unit_of_measurement = setpoint_def.get("unit")
-        self._attr_native_min_value = setpoint_def.get("min", 0)
-        self._attr_native_max_value = setpoint_def.get("max", 100)
-        self._attr_native_step = setpoint_def.get("step", 1)
+        self.entity_description = description
+        self._param_key = description.param_key
+        self._attr_unique_id = f"{self._device_id}_{description.key}"
 
         self._update_state()
 
@@ -193,19 +231,14 @@ class KlereoContainerCapacityNumber(KlereoEntity, NumberEntity):
 
     _attr_mode = NumberMode.BOX
     _attr_entity_category = EntityCategory.CONFIG
+    entity_description: KlereoCapacityDescription
 
-    def __init__(self, coordinator, device: dict, container_key: str, ct_def: dict) -> None:
+    def __init__(self, coordinator, device: dict, description: KlereoCapacityDescription) -> None:
         super().__init__(coordinator, device)
-        self._container_key = container_key
-        self._capacity_option = ct_def["capacity_option"]
-        self._capacity_default = ct_def["capacity_default"]
-
-        self._attr_translation_key = f"capacity_{container_key}"
-        self._attr_unique_id = f"{self._device_id}_capacity_{container_key}"
-        self._attr_native_unit_of_measurement = "L"
-        self._attr_native_min_value = ct_def.get("capacity_min", 1.0)
-        self._attr_native_max_value = ct_def.get("capacity_max", 200.0)
-        self._attr_native_step = ct_def.get("capacity_step", 0.5)
+        self.entity_description = description
+        self._capacity_option = description.capacity_option
+        self._capacity_default = description.capacity_default
+        self._attr_unique_id = f"{self._device_id}_{description.key}"
 
         self._update_state()
 

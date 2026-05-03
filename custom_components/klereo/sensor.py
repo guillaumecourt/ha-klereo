@@ -1,11 +1,13 @@
 """Sensor platform for the Klereo integration."""
 import logging
+from dataclasses import dataclass, field
 from typing import Any
 
 PARALLEL_UPDATES = 0
 
 from homeassistant.components.sensor import (
     SensorEntity,
+    SensorEntityDescription,
     SensorStateClass,
     SensorDeviceClass,
 )
@@ -18,6 +20,81 @@ from .const import PROBE_TYPES, CALCULATED_SENSORS, STATUS_SENSORS, CONTAINER_TR
 from .entity import KlereoEntity
 
 _LOGGER = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True, kw_only=True)
+class KlereoProbeSensorDescription(SensorEntityDescription):
+    """Sensor entity description for a Klereo probe."""
+
+    probe_type: int
+
+
+PROBE_SENSOR_DESCRIPTIONS: dict[int, KlereoProbeSensorDescription] = {
+    probe_type: KlereoProbeSensorDescription(
+        key=pdef["id_key"],
+        name=pdef["name"],
+        translation_key=pdef["id_key"],
+        probe_type=probe_type,
+        native_unit_of_measurement=pdef.get("unit"),
+        state_class=getattr(SensorStateClass, pdef["state_class"].upper()) if pdef.get("state_class") else None,
+        device_class=getattr(SensorDeviceClass, pdef["device_class"].upper()) if pdef.get("device_class") else None,
+        suggested_unit_of_measurement=(
+            UnitOfTemperature.CELSIUS if pdef.get("device_class") == "temperature"
+            else UnitOfPressure.MBAR if pdef.get("device_class") == "pressure"
+            else None
+        ),
+    )
+    for probe_type, pdef in PROBE_TYPES.items()
+}
+
+
+@dataclass(frozen=True, kw_only=True)
+class KlereoCalculatedSensorDescription(SensorEntityDescription):
+    """Sensor entity description for a Klereo calculated sensor."""
+
+    formula: str
+    debit_key: str | None = None
+    time_key: str | None = None
+    param_key: str | None = None
+    round_digits: int = 2
+
+
+CALCULATED_SENSOR_DESCRIPTIONS: tuple[KlereoCalculatedSensorDescription, ...] = tuple(
+    KlereoCalculatedSensorDescription(
+        key=sdef["id_key"],
+        translation_key=sdef["id_key"],
+        native_unit_of_measurement=sdef.get("unit"),
+        state_class=getattr(SensorStateClass, sdef["state_class"].upper()) if sdef.get("state_class") else None,
+        device_class=getattr(SensorDeviceClass, sdef["device_class"].upper()) if sdef.get("device_class") else None,
+        entity_registry_enabled_default=sdef.get("enabled_default", True),
+        formula=sdef["formula"],
+        debit_key=sdef.get("debit_key"),
+        time_key=sdef.get("time_key"),
+        param_key=sdef.get("param_key"),
+        round_digits=sdef.get("round_digits", 2),
+    )
+    for sdef in CALCULATED_SENSORS.values()
+)
+
+
+@dataclass(frozen=True, kw_only=True)
+class KlereoStatusSensorDescription(SensorEntityDescription):
+    """Sensor entity description for a Klereo status sensor."""
+
+    param_key: str
+    value_map: dict = field(default_factory=dict)
+
+
+STATUS_SENSOR_DESCRIPTIONS: tuple[KlereoStatusSensorDescription, ...] = tuple(
+    KlereoStatusSensorDescription(
+        key=sdef["id_key"],
+        translation_key=sdef["id_key"],
+        param_key=param_key,
+        value_map=sdef.get("value_map") or {},  # type: ignore[arg-type]
+        entity_registry_enabled_default=sdef.get("enabled_default", True),
+    )
+    for param_key, sdef in STATUS_SENSORS.items()
+)
 
 
 async def async_setup_entry(
@@ -61,7 +138,7 @@ async def async_setup_entry(
             continue
 
         # Probe sensors — detect duplicates by type
-        probes = [p for p in device.get("probes", []) if p.get("type") in PROBE_TYPES]
+        probes = [p for p in device.get("probes", []) if p.get("type") in PROBE_SENSOR_DESCRIPTIONS]
         type_counts: dict[int, int] = {}
         for probe in probes:
             t = probe.get("type")
@@ -71,7 +148,8 @@ async def async_setup_entry(
             t = probe.get("type")
             type_instance[t] = type_instance.get(t, 0) + 1
             suffix = f" {type_instance[t]}" if type_counts.get(t, 0) > 1 else None
-            entity = _safe_create(KlereoProbeSensor, coordinator, device, probe, suffix)
+            desc = PROBE_SENSOR_DESCRIPTIONS[t]  # type: ignore[index]
+            entity = _safe_create(KlereoProbeSensor, coordinator, device, desc, probe.get("index"), suffix)
             if entity is not None:
                 sensors.append(entity)
 
@@ -80,18 +158,17 @@ async def async_setup_entry(
             merged_params = {**device["params"]}
             if isinstance(device.get("ExtraParams"), dict):
                 merged_params.update(device["ExtraParams"])
-            for sensor_key, sensor_def in CALCULATED_SENSORS.items():
-                # Only add if the required params exist
-                if _calculated_sensor_has_data(merged_params, sensor_def):
-                    entity = _safe_create(KlereoCalculatedSensor, coordinator, device, sensor_key, sensor_def)
+            for desc in CALCULATED_SENSOR_DESCRIPTIONS:
+                if _calculated_sensor_has_data(merged_params, desc):
+                    entity = _safe_create(KlereoCalculatedSensor, coordinator, device, desc)
                     if entity is not None:
                         sensors.append(entity)
 
         # Status sensors
         if "params" in device and isinstance(device["params"], dict):
-            for param_key, status_def in STATUS_SENSORS.items():
-                if param_key in device["params"]:
-                    entity = _safe_create(KlereoStatusSensor, coordinator, device, param_key, status_def)
+            for desc in STATUS_SENSOR_DESCRIPTIONS:
+                if desc.param_key in device["params"]:
+                    entity = _safe_create(KlereoStatusSensor, coordinator, device, desc)
                     if entity is not None:
                         sensors.append(entity)
 
@@ -120,45 +197,30 @@ async def async_setup_entry(
         _LOGGER.info("No Klereo sensors to add.")
 
 
-def _calculated_sensor_has_data(params: dict, sensor_def: dict) -> bool:
+def _calculated_sensor_has_data(params: dict, description: KlereoCalculatedSensorDescription) -> bool:
     """Check if the params contain the required keys for a calculated sensor."""
-    formula = sensor_def.get("formula")
+    formula = description.formula
     if formula == "debit_time":
-        return sensor_def.get("debit_key") in params and sensor_def.get("time_key") in params
+        return description.debit_key in params and description.time_key in params
     elif formula == "time_hours":
-        return sensor_def.get("time_key") in params
+        return description.time_key in params
     elif formula in ("param_direct", "gram_production"):
-        return sensor_def.get("param_key") in params
+        return description.param_key in params
     return False
 
 
 class KlereoProbeSensor(KlereoEntity, SensorEntity):
     """Representation of a Klereo probe sensor."""
 
-    def __init__(self, coordinator, device: dict, probe: dict, suffix: str | None = None) -> None:
+    entity_description: KlereoProbeSensorDescription
+
+    def __init__(self, coordinator, device: dict, description: KlereoProbeSensorDescription, probe_index, suffix: str | None = None) -> None:
         super().__init__(coordinator, device)
-        self._probe = probe
-        self._probe_index = probe.get("index", "N/A")
-        probe_type = probe.get("type")
-        probe_details = PROBE_TYPES[probe_type]  # type: ignore[index]
-
-        self._attr_translation_key = probe_details["id_key"]
+        self.entity_description = description
+        self._probe_index = probe_index
+        self._attr_unique_id = f"{self._device_id}_{description.key}_{probe_index}"
         if suffix:
-            self._attr_name = probe_details["name"] + suffix
-        self._attr_unique_id = f"{self._device_id}_{probe_details['id_key']}_{self._probe_index}"
-        self._attr_native_unit_of_measurement = probe_details.get("unit")
-
-        state_class = probe_details.get("state_class")
-        if state_class:
-            self._attr_state_class = getattr(SensorStateClass, state_class.upper(), state_class)
-
-        device_class = probe_details.get("device_class")
-        if device_class:
-            self._attr_device_class = getattr(SensorDeviceClass, device_class.upper(), device_class)
-            if device_class == "temperature":
-                self._attr_suggested_unit_of_measurement = UnitOfTemperature.CELSIUS
-            elif device_class == "pressure":
-                self._attr_suggested_unit_of_measurement = UnitOfPressure.MBAR
+            self._attr_name = (description.name or description.key) + suffix
 
         self._update_state()
 
@@ -189,24 +251,12 @@ class KlereoProbeSensor(KlereoEntity, SensorEntity):
 class KlereoCalculatedSensor(KlereoEntity, SensorEntity):
     """Data-driven calculated sensor."""
 
-    def __init__(self, coordinator, device: dict, sensor_key: str, sensor_def: dict) -> None:
+    entity_description: KlereoCalculatedSensorDescription
+
+    def __init__(self, coordinator, device: dict, description: KlereoCalculatedSensorDescription) -> None:
         super().__init__(coordinator, device)
-        self._sensor_def = sensor_def
-
-        self._attr_translation_key = sensor_def["id_key"]
-        self._attr_unique_id = f"{self._device_id}_{sensor_def['id_key']}"
-        self._attr_native_unit_of_measurement = sensor_def.get("unit")
-
-        state_class = sensor_def.get("state_class")
-        if state_class:
-            self._attr_state_class = getattr(SensorStateClass, state_class.upper(), state_class)
-
-        device_class = sensor_def.get("device_class")
-        if device_class:
-            self._attr_device_class = getattr(SensorDeviceClass, device_class.upper(), device_class)
-
-        if not sensor_def.get("enabled_default", True):
-            self._attr_entity_registry_enabled_default = False
+        self.entity_description = description
+        self._attr_unique_id = f"{self._device_id}_{description.key}"
 
         self._update_state()
 
@@ -218,30 +268,30 @@ class KlereoCalculatedSensor(KlereoEntity, SensorEntity):
     def _update_state(self) -> None:
         new_value = None
         params = self._get_params()
-        formula = self._sensor_def.get("formula")
+        desc = self.entity_description
+        formula = desc.formula
 
         try:
-            if formula == "debit_time":
-                debit_raw = params.get(self._sensor_def["debit_key"])
-                time_raw = params.get(self._sensor_def["time_key"])
+            if formula == "debit_time" and desc.debit_key and desc.time_key:
+                debit_raw = params.get(desc.debit_key)
+                time_raw = params.get(desc.time_key)
                 if debit_raw is not None and time_raw is not None:
                     debit = float(debit_raw)
                     time_val = float(time_raw)
-                    digits = self._sensor_def.get("round_digits", 2)
-                    new_value = round((debit / VOLUME_DIVISOR) * time_val, digits) if debit > 0 else 0.0
+                    new_value = round((debit / VOLUME_DIVISOR) * time_val, desc.round_digits) if debit > 0 else 0.0
 
-            elif formula == "time_hours":
-                time_raw = params.get(self._sensor_def["time_key"])
+            elif formula == "time_hours" and desc.time_key:
+                time_raw = params.get(desc.time_key)
                 if time_raw is not None:
                     new_value = round(float(time_raw) / 3600.0, 2)
 
-            elif formula == "param_direct":
-                raw = params.get(self._sensor_def["param_key"])
+            elif formula == "param_direct" and desc.param_key:
+                raw = params.get(desc.param_key)
                 if raw is not None:
                     new_value = float(raw)
 
-            elif formula == "gram_production":
-                raw = params.get(self._sensor_def["param_key"])
+            elif formula == "gram_production" and desc.param_key:
+                raw = params.get(desc.param_key)
                 if raw is not None:
                     new_value = round(float(raw) / 1000.0, 2)
 
@@ -254,17 +304,14 @@ class KlereoCalculatedSensor(KlereoEntity, SensorEntity):
 class KlereoStatusSensor(KlereoEntity, SensorEntity):
     """Status/mode sensor that maps integer values to string labels."""
 
-    def __init__(self, coordinator, device: dict, param_key: str, status_def: dict) -> None:
+    entity_description: KlereoStatusSensorDescription
+
+    def __init__(self, coordinator, device: dict, description: KlereoStatusSensorDescription) -> None:
         super().__init__(coordinator, device)
-        self._param_key = param_key
-        self._status_def = status_def
-        self._value_map = status_def.get("value_map", {})
-
-        self._attr_translation_key = status_def["id_key"]
-        self._attr_unique_id = f"{self._device_id}_{status_def['id_key']}"
-
-        if not status_def.get("enabled_default", True):
-            self._attr_entity_registry_enabled_default = False
+        self.entity_description = description
+        self._param_key = description.param_key
+        self._value_map = description.value_map
+        self._attr_unique_id = f"{self._device_id}_{description.key}"
 
         self._update_state()
 
