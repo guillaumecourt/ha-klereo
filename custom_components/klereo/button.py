@@ -1,15 +1,17 @@
 """Button platform for the Klereo integration — container reset buttons."""
 import logging
 from dataclasses import dataclass
-from datetime import datetime
+
+PARALLEL_UPDATES = 0
 
 from homeassistant.components.button import ButtonEntity, ButtonEntityDescription
 from homeassistant.const import EntityCategory
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.util import dt as dt_util
 
-from .const import CONTAINER_TRACKING
+from .const import CONTAINER_TRACKING, VOLUME_DIVISOR
 from .entity import KlereoEntity
 
 _LOGGER = logging.getLogger(__name__)
@@ -22,8 +24,10 @@ class KlereoButtonDescription(ButtonEntityDescription):
     container_key: str
     debit_key: str
     total_time_key: str
+    today_time_key: str
     reset_option: str
     reset_date_option: str
+    today_time_reset_option: str
 
 
 BUTTON_DESCRIPTIONS: tuple[KlereoButtonDescription, ...] = tuple(
@@ -34,10 +38,19 @@ BUTTON_DESCRIPTIONS: tuple[KlereoButtonDescription, ...] = tuple(
         container_key=ct_key,
         debit_key=ct_def["debit_key"],
         total_time_key=ct_def["total_time_key"],
+        today_time_key=ct_def["today_time_key"],
         reset_option=ct_def["reset_option"],
         reset_date_option=ct_def["reset_date_option"],
+        today_time_reset_option=ct_def["today_time_reset_option"],
     )
     for ct_key, ct_def in CONTAINER_TRACKING.items()
+)
+
+
+REFRESH_BUTTON_DESCRIPTION = ButtonEntityDescription(
+    key="refresh",
+    translation_key="refresh",
+    entity_category=EntityCategory.CONFIG,
 )
 
 
@@ -77,7 +90,7 @@ def _compute_current_total(params: dict, debit_key: str, time_key: str) -> float
     try:
         debit = float(params.get(debit_key, 0))
         time_s = float(params.get(time_key, 0))
-        return (debit / 36000.0) * time_s
+        return (debit / VOLUME_DIVISOR) * time_s
     except (ValueError, TypeError):
         return 0.0
 
@@ -105,19 +118,34 @@ class KlereoContainerResetButton(KlereoEntity, ButtonEntity):
             self.entity_description.total_time_key,
         )
 
+        # Snapshot the pod's intra-day counter so post-reset daily_history
+        # entries can subtract pre-reset consumption. Cleared by the
+        # coordinator on rollover (TodayTime resets to 0 at pod midnight)
+        # or when the day rolls over on the HA side.
+        today_time_snapshot = 0.0
+        try:
+            today_time_snapshot = float(
+                params.get(self.entity_description.today_time_key, 0) or 0
+            )
+        except (ValueError, TypeError):
+            today_time_snapshot = 0.0
+
         entry = self.coordinator.config_entry
+        container_key = self.entity_description.container_key
         new_options = {
             **entry.options,
             self.entity_description.reset_option: current_total,
-            self.entity_description.reset_date_option: datetime.now().isoformat(),
+            self.entity_description.reset_date_option: dt_util.now().isoformat(),
+            self.entity_description.today_time_reset_option: today_time_snapshot,
+            f"{container_key}_daily_history": [],
         }
         self.hass.config_entries.async_update_entry(entry, options=new_options)
 
-        container_key = self.entity_description.container_key
         _LOGGER.info(
-            "Container %s reset. Current total: %.1f L",
+            "Container %s reset. Current total: %.1f L, today_time_snapshot: %.0fs",
             container_key,
             current_total,
+            today_time_snapshot,
         )
 
         await self.hass.services.async_call(
@@ -136,11 +164,11 @@ class KlereoContainerResetButton(KlereoEntity, ButtonEntity):
 class KlereoRefreshButton(KlereoEntity, ButtonEntity):
     """Button to manually refresh data from the Klereo API."""
 
-    _attr_entity_category = EntityCategory.CONFIG
-    _attr_translation_key = "refresh"
+    entity_description: ButtonEntityDescription
 
     def __init__(self, coordinator, device: dict):
         super().__init__(coordinator, device)
+        self.entity_description = REFRESH_BUTTON_DESCRIPTION
         self._attr_unique_id = f"{self._device_id}_refresh"
 
     async def async_press(self) -> None:

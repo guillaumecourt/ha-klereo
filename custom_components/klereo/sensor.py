@@ -1,6 +1,7 @@
 """Sensor platform for the Klereo integration."""
 import logging
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from typing import Any
 
 PARALLEL_UPDATES = 0
@@ -15,6 +16,7 @@ from homeassistant.const import UnitOfTemperature, UnitOfPressure
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.util import dt as dt_util
 
 from .const import PROBE_TYPES, CALCULATED_SENSORS, STATUS_SENSORS, CONTAINER_TRACKING, ALERT_CODES, VOLUME_DIVISOR
 from .entity import KlereoEntity
@@ -97,6 +99,70 @@ STATUS_SENSOR_DESCRIPTIONS: tuple[KlereoStatusSensorDescription, ...] = tuple(
 )
 
 
+ALERT_COUNT_SENSOR_DESCRIPTION = SensorEntityDescription(
+    key="alert_count",
+    translation_key="alert_count",
+    state_class=SensorStateClass.MEASUREMENT,
+)
+
+
+@dataclass(frozen=True, kw_only=True)
+class KlereoContainerRemainingSensorDescription(SensorEntityDescription):
+    """Sensor entity description for a container remaining-volume sensor."""
+
+    container_key: str
+    debit_key: str
+    total_time_key: str
+    capacity_option: str
+    capacity_default: float
+    reset_option: str
+
+
+CONTAINER_REMAINING_DESCRIPTIONS: tuple[KlereoContainerRemainingSensorDescription, ...] = tuple(
+    KlereoContainerRemainingSensorDescription(
+        key=f"container_remaining_{ct_key}",
+        translation_key=f"container_remaining_{ct_key}",
+        native_unit_of_measurement="L",
+        state_class=SensorStateClass.MEASUREMENT,
+        container_key=ct_key,
+        debit_key=ct_def["debit_key"],
+        total_time_key=ct_def["total_time_key"],
+        capacity_option=ct_def["capacity_option"],
+        capacity_default=ct_def["capacity_default"],
+        reset_option=ct_def["reset_option"],
+    )
+    for ct_key, ct_def in CONTAINER_TRACKING.items()
+)
+
+
+@dataclass(frozen=True, kw_only=True)
+class KlereoContainerDaysRemainingSensorDescription(SensorEntityDescription):
+    """Sensor entity description for a container days-remaining estimation sensor."""
+
+    container_key: str
+    debit_key: str
+    total_time_key: str
+    capacity_option: str
+    capacity_default: float
+    reset_option: str
+
+
+CONTAINER_DAYS_REMAINING_DESCRIPTIONS: tuple[KlereoContainerDaysRemainingSensorDescription, ...] = tuple(
+    KlereoContainerDaysRemainingSensorDescription(
+        key=f"container_days_remaining_{ct_key}",
+        translation_key=f"container_days_remaining_{ct_key}",
+        native_unit_of_measurement="d",
+        container_key=ct_key,
+        debit_key=ct_def["debit_key"],
+        total_time_key=ct_def["total_time_key"],
+        capacity_option=ct_def["capacity_option"],
+        capacity_default=ct_def["capacity_default"],
+        reset_option=ct_def["reset_option"],
+    )
+    for ct_key, ct_def in CONTAINER_TRACKING.items()
+)
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: ConfigEntry,
@@ -173,11 +239,12 @@ async def async_setup_entry(
                         sensors.append(entity)
 
         # Container estimation sensors
-        for ct_key, ct_def in CONTAINER_TRACKING.items():
-            entity = _safe_create(KlereoContainerRemainingSensor, coordinator, device, entry, ct_key, ct_def)
+        for desc in CONTAINER_REMAINING_DESCRIPTIONS:
+            entity = _safe_create(KlereoContainerRemainingSensor, coordinator, device, entry, desc)
             if entity is not None:
                 sensors.append(entity)
-            entity = _safe_create(KlereoContainerDaysRemainingSensor, coordinator, device, entry, ct_key, ct_def)
+        for desc in CONTAINER_DAYS_REMAINING_DESCRIPTIONS:
+            entity = _safe_create(KlereoContainerDaysRemainingSensor, coordinator, device, entry, desc)
             if entity is not None:
                 sensors.append(entity)
 
@@ -336,11 +403,12 @@ class KlereoStatusSensor(KlereoEntity, SensorEntity):
 class KlereoAlertCountSensor(KlereoEntity, SensorEntity):
     """Alert count sensor with messages as extra attributes."""
 
+    entity_description: SensorEntityDescription
+
     def __init__(self, coordinator, device: dict) -> None:
         super().__init__(coordinator, device)
-        self._attr_translation_key = "alert_count"
+        self.entity_description = ALERT_COUNT_SENSOR_DESCRIPTION
         self._attr_unique_id = f"{self._device_id}_alert_count"
-        self._attr_state_class = SensorStateClass.MEASUREMENT
         self._update_state()
 
     @callback
@@ -386,19 +454,48 @@ def _compute_volume(params: dict, debit_key: str, time_key: str) -> float | None
         return None
 
 
+def _compute_remaining(
+    volume_total: float,
+    reset_at: float,
+    capacity: float,
+    container_key: str,
+) -> float | None:
+    """Compute remaining volume in liters from current total, reset checkpoint and capacity.
+
+    Returns None (and emits a WARNING) when ``volume_total < reset_at``, which
+    indicates the pod counter has rolled back (firmware reset, overflow). In
+    that case the estimate is meaningless and the entity should display
+    ``unknown`` rather than a clamped value.
+    """
+    if volume_total < reset_at:
+        _LOGGER.warning(
+            "Container %s: volume_total (%.2f) < reset_at (%.2f), "
+            "pod counter may have rolled over. Press the reset button to recalibrate.",
+            container_key,
+            volume_total,
+            reset_at,
+        )
+        return None
+    consumed = volume_total - reset_at
+    return max(round(capacity - consumed, 2), 0.0)
+
+
 class KlereoContainerRemainingSensor(KlereoEntity, SensorEntity):
     """Sensor showing remaining volume in a container."""
 
-    _attr_state_class = SensorStateClass.MEASUREMENT
-    _attr_native_unit_of_measurement = "L"
+    entity_description: KlereoContainerRemainingSensorDescription
 
-    def __init__(self, coordinator, device: dict, entry, ct_key: str, ct_def: dict) -> None:
+    def __init__(
+        self,
+        coordinator,
+        device: dict,
+        entry,
+        description: KlereoContainerRemainingSensorDescription,
+    ) -> None:
         super().__init__(coordinator, device)
         self._entry = entry
-        self._ct_def = ct_def
-
-        self._attr_translation_key = f"container_remaining_{ct_key}"
-        self._attr_unique_id = f"{self._device_id}_container_remaining_{ct_key}"
+        self.entity_description = description
+        self._attr_unique_id = f"{self._device_id}_{description.key}"
         self._update_state()
 
     @callback
@@ -407,34 +504,38 @@ class KlereoContainerRemainingSensor(KlereoEntity, SensorEntity):
         self.async_write_ha_state()
 
     def _update_state(self) -> None:
+        desc = self.entity_description
         params = self._get_params()
-        volume_total = _compute_volume(params, self._ct_def["debit_key"], self._ct_def["total_time_key"])
+        volume_total = _compute_volume(params, desc.debit_key, desc.total_time_key)
         if volume_total is None:
             self._attr_native_value = None
             return
 
         options = self._entry.options
-        capacity = float(options.get(self._ct_def["capacity_option"], self._ct_def["capacity_default"]))
-        reset_at = float(options.get(self._ct_def["reset_option"], 0))
+        capacity = float(options.get(desc.capacity_option, desc.capacity_default))
+        reset_at = float(options.get(desc.reset_option, 0))
 
-        consumed_since_reset = volume_total - reset_at
-        remaining = round(capacity - consumed_since_reset, 2)
-        self._attr_native_value = max(remaining, 0.0)
+        self._attr_native_value = _compute_remaining(
+            volume_total, reset_at, capacity, desc.container_key
+        )
 
 
 class KlereoContainerDaysRemainingSensor(KlereoEntity, SensorEntity):
     """Sensor estimating days until container needs replacement."""
 
-    _attr_native_unit_of_measurement = "d"
+    entity_description: KlereoContainerDaysRemainingSensorDescription
 
-    def __init__(self, coordinator, device: dict, entry, ct_key: str, ct_def: dict) -> None:
+    def __init__(
+        self,
+        coordinator,
+        device: dict,
+        entry,
+        description: KlereoContainerDaysRemainingSensorDescription,
+    ) -> None:
         super().__init__(coordinator, device)
         self._entry = entry
-        self._ct_key = ct_key
-        self._ct_def = ct_def
-
-        self._attr_translation_key = f"container_days_remaining_{ct_key}"
-        self._attr_unique_id = f"{self._device_id}_container_days_remaining_{ct_key}"
+        self.entity_description = description
+        self._attr_unique_id = f"{self._device_id}_{description.key}"
         self._update_state()
 
     @callback
@@ -443,20 +544,21 @@ class KlereoContainerDaysRemainingSensor(KlereoEntity, SensorEntity):
         self.async_write_ha_state()
 
     def _update_state(self) -> None:
-        from datetime import datetime, timezone, date
-
+        desc = self.entity_description
         params = self._get_params()
-        volume_total = _compute_volume(params, self._ct_def["debit_key"], self._ct_def["total_time_key"])
+        volume_total = _compute_volume(params, desc.debit_key, desc.total_time_key)
         if volume_total is None:
             self._attr_native_value = None
             return
 
-        # Remaining volume
         options = self._entry.options
-        capacity = float(options.get(self._ct_def["capacity_option"], self._ct_def["capacity_default"]))
-        reset_at = float(options.get(self._ct_def["reset_option"], 0))
-        remaining = capacity - (volume_total - reset_at)
-
+        capacity = float(options.get(desc.capacity_option, desc.capacity_default))
+        reset_at = float(options.get(desc.reset_option, 0))
+        remaining = _compute_remaining(volume_total, reset_at, capacity, desc.container_key)
+        if remaining is None:
+            # Pod counter rollback already logged by _compute_remaining.
+            self._attr_native_value = None
+            return
         if remaining <= 0:
             self._attr_native_value = 0.0
             return
@@ -465,9 +567,9 @@ class KlereoContainerDaysRemainingSensor(KlereoEntity, SensorEntity):
         # The last entry of daily_history is the in-progress day (cumulative
         # since midnight). Excluding it prevents a partial cumul from biasing
         # the average and causing intra-day sawtooth on the resulting estimate.
-        history_key = f"{self._ct_key}_daily_history"
+        history_key = f"{desc.container_key}_daily_history"
         history = options.get(history_key, [])
-        today_str = date.today().isoformat()
+        today_str = dt_util.now().date().isoformat()
         completed = [e for e in history if e.get("date") != today_str and "volume" in e]
         avg_completed = None
         if completed:
@@ -492,6 +594,25 @@ class KlereoContainerDaysRemainingSensor(KlereoEntity, SensorEntity):
         # Negligible / unknown rate → return None rather than 9999d aberrations.
         if not daily_rate or daily_rate < 0.01:
             self._attr_native_value = None
+            _LOGGER.debug(
+                "Container %s days_remaining: volume_total=%.2f remaining=%.2f "
+                "daily_rate=%s source=none days_left=None",
+                desc.container_key,
+                volume_total,
+                remaining,
+                daily_rate,
+            )
             return
 
-        self._attr_native_value = round(remaining / daily_rate, 1)
+        days_left = round(remaining / daily_rate, 1)
+        self._attr_native_value = days_left
+        _LOGGER.debug(
+            "Container %s days_remaining: volume_total=%.2f remaining=%.2f "
+            "daily_rate=%.4f source=%s days_left=%s",
+            desc.container_key,
+            volume_total,
+            remaining,
+            daily_rate,
+            "completed" if avg_completed is not None else "installDate",
+            days_left,
+        )

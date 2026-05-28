@@ -27,5 +27,6 @@ async def async_get_config_entry_diagnostics(
 
     return {
         "config_entry": _redact_data(dict(entry.data)),
+        "config_options": _redact_data(dict(entry.options)),
         "coordinator_data": _redact_data(coordinator.data if coordinator else None),
     }
