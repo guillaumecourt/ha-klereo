@@ -12,9 +12,13 @@ from homeassistant.util import dt as dt_util
 from homeassistant.helpers import device_registry as dr
 
 from .const import DOMAIN, CONTAINER_TRACKING, ALERT_CODES, VOLUME_DIVISOR
-from .api import KlereoApi
+from .api import KlereoApi, KlereoServiceUnavailableError, KlereoSessionExpiredError
 
 STALE_DEVICE_THRESHOLD = 3
+# Consecutive session rejections tolerated before asking the user to re-auth.
+# ConfigEntryAuthFailed stops polling until the user acts, so a transient
+# server-side rejection must not be enough to trigger it.
+AUTH_FAILURE_THRESHOLD = 3
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -27,6 +31,36 @@ class KlereoDataUpdateCoordinator(DataUpdateCoordinator):
         self.api = api
         self._previous_alert_count: dict[int, int] = {}
         self._absent_device_count: dict[str, int] = {}
+        self._consecutive_auth_failures = 0
+
+    def _raise_auth_rejection(self, err: Exception, reason: str) -> None:
+        """Escalate a rejected session, but only once it proves persistent.
+
+        The API client already retried with a freshly minted JWT before we get
+        here. ConfigEntryAuthFailed suspends polling until the user completes a
+        reauth flow, so a one-off server-side rejection must stay an
+        UpdateFailed: the coordinator then keeps retrying and recovers on its
+        own when the service comes back.
+        """
+        self._consecutive_auth_failures += 1
+        if self._consecutive_auth_failures < AUTH_FAILURE_THRESHOLD:
+            _LOGGER.warning(
+                "Klereo rejected the session (%s) - attempt %d/%d, retrying",
+                reason,
+                self._consecutive_auth_failures,
+                AUTH_FAILURE_THRESHOLD,
+            )
+            raise UpdateFailed(f"Klereo session rejected ({reason})") from err
+        async_create_issue(
+            self.hass,
+            DOMAIN,
+            "auth_expired",
+            is_fixable=False,
+            is_persistent=True,
+            severity=IssueSeverity.ERROR,
+            translation_key="auth_expired",
+        )
+        raise ConfigEntryAuthFailed(f"Klereo session rejected ({reason})") from err
 
     async def _async_update_data(self):
         """Fetch data from the API."""
@@ -35,18 +69,7 @@ class KlereoDataUpdateCoordinator(DataUpdateCoordinator):
             data = await self.api.async_get_pool_details()
         except aiohttp.ClientResponseError as err:
             if err.status in (401, 403):
-                async_create_issue(
-                    self.hass,
-                    DOMAIN,
-                    "auth_expired",
-                    is_fixable=False,
-                    is_persistent=True,
-                    severity=IssueSeverity.ERROR,
-                    translation_key="auth_expired",
-                )
-                raise ConfigEntryAuthFailed(
-                    f"Authentication failed (HTTP {err.status})"
-                ) from err
+                self._raise_auth_rejection(err, f"HTTP {err.status}")
             async_create_issue(
                 self.hass,
                 DOMAIN,
@@ -57,6 +80,15 @@ class KlereoDataUpdateCoordinator(DataUpdateCoordinator):
                 translation_key="api_unreachable",
             )
             raise UpdateFailed(f"API error (HTTP {err.status}): {err}") from err
+        except KlereoServiceUnavailableError as err:
+            # Klereo maintenance window (typically nightly): transient, entities
+            # come back on their own — no repair issue, no auth flow.
+            _LOGGER.warning("Klereo service temporarily unavailable: %s", err)
+            raise UpdateFailed(f"Klereo service unavailable: {err}") from err
+        except KlereoSessionExpiredError as err:
+            # Raised only after a JWT renewal was already attempted and the API
+            # still rejected the session.
+            self._raise_auth_rejection(err, str(err))
         except Exception as err:
             _LOGGER.error("Error communicating with Klereo API", exc_info=True)
             async_create_issue(
@@ -76,6 +108,7 @@ class KlereoDataUpdateCoordinator(DataUpdateCoordinator):
         _LOGGER.debug("Klereo data updated: %d device(s).", len(data))
 
         # Clear any previous repair issues on successful update
+        self._consecutive_auth_failures = 0
         async_delete_issue(self.hass, DOMAIN, "auth_expired")
         async_delete_issue(self.hass, DOMAIN, "api_unreachable")
 
