@@ -1,6 +1,7 @@
 """Klereo API client."""
 import aiohttp
 import asyncio
+import base64
 import hashlib
 import logging
 import json
@@ -36,6 +37,71 @@ from .const import (
 
 _LOGGER = logging.getLogger(__name__)
 _SUCCESS_PATTERN = re.compile(r'\b(success|ok)\b', re.IGNORECASE)
+
+# The Klereo API reports failures with HTTP 200 + {"status": "error", "detail": "..."}.
+# These patterns classify the French/English wording used in `detail`.
+_SESSION_EXPIRED_PATTERN = re.compile(
+    r"connexion n['\u2019]est plus valide"
+    r"|session (?:expir|invalid|non valid)"
+    r"|(?:jeton|token) (?:expir|invalid|non valid)"
+    r"|non authentifi|not authenticated|unauthori[sz]ed",
+    re.IGNORECASE,
+)
+_SERVICE_UNAVAILABLE_PATTERN = re.compile(
+    r"maintenance|indisponible|unavailable", re.IGNORECASE
+)
+# Seconds before `exp` at which a JWT is considered stale and refetched.
+JWT_EXPIRY_MARGIN = 60
+
+
+class KlereoApiError(Exception):
+    """Base error raised when the Klereo API reports a failure in a 200 response."""
+
+
+class KlereoSessionExpiredError(KlereoApiError):
+    """The JWT is no longer accepted; a fresh one must be fetched."""
+
+
+class KlereoServiceUnavailableError(KlereoApiError):
+    """The Klereo service is temporarily down (maintenance window)."""
+
+
+def _clean_detail(detail: Any) -> str:
+    """Turn an API `detail` field into a readable one-line message."""
+    text = re.sub(r"<[^>]+>", " ", str(detail or ""))
+    return " ".join(text.split())
+
+
+def raise_for_api_error(response_data: Any) -> None:
+    """Raise the matching KlereoApiError when the payload reports an error.
+
+    Klereo answers HTTP 200 even for expired sessions and maintenance windows,
+    so the error is only visible in the body.
+    """
+    if not isinstance(response_data, dict):
+        return
+    status = response_data.get("status")
+    if not isinstance(status, str) or status.strip().lower() != "error":
+        return
+    detail = _clean_detail(response_data.get("detail") or response_data.get("message"))
+    if _SESSION_EXPIRED_PATTERN.search(detail):
+        raise KlereoSessionExpiredError(detail or "Session no longer valid")
+    if _SERVICE_UNAVAILABLE_PATTERN.search(detail):
+        raise KlereoServiceUnavailableError(detail or "Service temporarily unavailable")
+    raise KlereoApiError(detail or "Unknown API error")
+
+
+def jwt_expiry(token: str) -> Optional[float]:
+    """Return the `exp` claim of a JWT (epoch seconds), or None if unreadable."""
+    try:
+        payload_b64 = token.split(".")[1]
+        payload_b64 += "=" * (-len(payload_b64) % 4)
+        payload = json.loads(base64.urlsafe_b64decode(payload_b64))
+        exp = payload.get("exp")
+        return float(exp) if exp is not None else None
+    except Exception:  # noqa: BLE001 - an unreadable token just disables the check
+        _LOGGER.debug("Could not read JWT expiry claim.")
+        return None
 
 
 def hash_password(password: str) -> str:
@@ -116,6 +182,7 @@ class KlereoApi:
         self.base_url = BASE_URL
         self.session = aiohttp_client.async_get_clientsession(hass)
         self.jwt_token: str | None = None
+        self.token_expiry: float | None = None
         self.pool_id = pool_id
         self._last_token_failure: float = 0.0
         self._TOKEN_COOLDOWN = 30  # seconds
@@ -131,7 +198,7 @@ class KlereoApi:
     async def __aexit__(self, exc_type, exc_value, traceback):
         await self.async_close()
 
-    async def _request(self, method: str, endpoint: str, data: Optional[Dict] = None, params: Optional[Dict] = None, needs_auth: bool = True) -> Any:
+    async def _request(self, method: str, endpoint: str, data: Optional[Dict] = None, params: Optional[Dict] = None, needs_auth: bool = True, allow_retry: bool = True) -> Any:
         """Make an API request."""
         url = f"{self.base_url}{endpoint}"
         headers = {
@@ -155,11 +222,22 @@ class KlereoApi:
             async with self.session.request(method, url, headers=headers, data=data, params=params, timeout=20) as response:
                 _LOGGER.debug("Response Status: %s", response.status)
                 response.raise_for_status()
-                return await handle_response(response)
+                response_data = await handle_response(response)
         except aiohttp.ClientResponseError as err:
             _LOGGER.error("API error: URL=%s, Status=%s, Error=%s", url, err.status, err.message)
             if err.status in [401, 403]:
                 self.jwt_token = None
+                self.token_expiry = None
+                if needs_auth and allow_retry:
+                    self._last_token_failure = 0.0
+                    _LOGGER.info(
+                        "Klereo rejected the JWT (HTTP %s), renewing and retrying %s",
+                        err.status, endpoint,
+                    )
+                    return await self._request(
+                        method, endpoint, data=data, params=params,
+                        needs_auth=needs_auth, allow_retry=False,
+                    )
             raise
         except asyncio.TimeoutError:
             _LOGGER.error("API timeout: %s", url)
@@ -171,10 +249,37 @@ class KlereoApi:
             _LOGGER.exception("Unexpected API error: %s", e)
             raise
 
+        # Klereo signals expired sessions and maintenance with HTTP 200 bodies.
+        try:
+            raise_for_api_error(response_data)
+        except KlereoSessionExpiredError as err:
+            self.jwt_token = None
+            self.token_expiry = None
+            if needs_auth and allow_retry:
+                # The cooldown guards against hammering after a *failed* fetch;
+                # here we know the current token is dead, so refetch immediately.
+                self._last_token_failure = 0.0
+                _LOGGER.info("Klereo session expired (%s), renewing JWT and retrying %s", err, endpoint)
+                return await self._request(
+                    method, endpoint, data=data, params=params,
+                    needs_auth=needs_auth, allow_retry=False,
+                )
+            _LOGGER.error("Klereo session still rejected after JWT renewal: %s", err)
+            raise
+        return response_data
+
     # --- Authentication ---
 
     async def async_ensure_token(self) -> Optional[str]:
         """Ensure JWT token is valid, fetching if needed."""
+        if (
+            self.jwt_token is not None
+            and self.token_expiry is not None
+            and time.time() >= self.token_expiry - JWT_EXPIRY_MARGIN
+        ):
+            _LOGGER.debug("JWT token expired or about to expire, discarding.")
+            self.jwt_token = None
+            self.token_expiry = None
         if self.jwt_token is None:
             now = time.monotonic()
             if now - self._last_token_failure < self._TOKEN_COOLDOWN:
@@ -184,6 +289,7 @@ class KlereoApi:
             try:
                 self.jwt_token = await self.async_get_token()
                 if self.jwt_token:
+                    self.token_expiry = jwt_expiry(self.jwt_token)
                     _LOGGER.info("New JWT token obtained.")
                 else:
                     self._last_token_failure = now
@@ -192,6 +298,7 @@ class KlereoApi:
                 self._last_token_failure = now
                 _LOGGER.error("Exception fetching JWT token: %s", e)
                 self.jwt_token = None
+                self.token_expiry = None
         return self.jwt_token
 
     async def async_get_token(self) -> Optional[str]:
@@ -281,9 +388,17 @@ class KlereoApi:
                 if isinstance(response_data["response"], list):
                     _LOGGER.debug("Received data for %d device(s).", len(response_data["response"]))
                     return response_data["response"]
-                _LOGGER.warning("'response' is not a list.")
+                _LOGGER.warning(
+                    "'response' is not a list (got %s): %s",
+                    type(response_data["response"]).__name__,
+                    str(response_data["response"])[:200],
+                )
             else:
-                _LOGGER.error("Unexpected GetPoolDetails response structure: %s", type(response_data))
+                _LOGGER.error(
+                    "Unexpected GetPoolDetails response structure (type=%s): %s",
+                    type(response_data).__name__,
+                    str(response_data)[:200],
+                )
             return []
         except Exception as err:
             _LOGGER.error("Failed GetPoolDetails: %s", err)
