@@ -1,4 +1,14 @@
 {
+  "issues": {
+    "auth_expired": {
+      "title": "Echec d'authentification Klereo",
+      "description": "L'API Klereo a refuse vos identifiants. Reauthentifiez-vous dans les parametres de l'integration."
+    },
+    "api_unreachable": {
+      "title": "API Klereo injoignable",
+      "description": "Impossible de joindre l'API Klereo. Le service est peut-etre temporairement indisponible."
+    }
+  },
   "config": {
     "step": {
       "user": {
@@ -44,6 +54,20 @@
           "update_interval": "Intervalle de mise a jour (minutes)"
         }
       }
+    }
+  },
+  "exceptions": {
+    "set_output_failed": {
+      "message": "Echec du reglage de la sortie {output}"
+    },
+    "select_option_failed": {
+      "message": "Echec du reglage de l'option {option}"
+    },
+    "invalid_option": {
+      "message": "Option invalide : {option}"
+    },
+    "set_value_failed": {
+      "message": "Echec du reglage de {param} sur {value}"
     }
   },
   "entity": {

@@ -1,4 +1,14 @@
 {
+  "issues": {
+    "auth_expired": {
+      "title": "Klereo authentication failed",
+      "description": "The Klereo API rejected your credentials. Please re-authenticate in the integration settings."
+    },
+    "api_unreachable": {
+      "title": "Klereo API unreachable",
+      "description": "Unable to connect to the Klereo API. The service may be temporarily unavailable."
+    }
+  },
   "config": {
     "step": {
       "user": {
@@ -44,6 +54,20 @@
           "update_interval": "Update interval (minutes)"
         }
       }
+    }
+  },
+  "exceptions": {
+    "set_output_failed": {
+      "message": "Failed to set output {output}"
+    },
+    "select_option_failed": {
+      "message": "Failed to set option {option}"
+    },
+    "invalid_option": {
+      "message": "Invalid option: {option}"
+    },
+    "set_value_failed": {
+      "message": "Failed to set {param} to {value}"
     }
   },
   "entity": {
