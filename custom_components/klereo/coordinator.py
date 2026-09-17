@@ -1,6 +1,6 @@
 """Data update coordinator for the Klereo integration."""
 import logging
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 import aiohttp
 from homeassistant.core import HomeAssistant
@@ -19,8 +19,27 @@ STALE_DEVICE_THRESHOLD = 3
 # ConfigEntryAuthFailed stops polling until the user acts, so a transient
 # server-side rejection must not be enough to trigger it.
 AUTH_FAILURE_THRESHOLD = 3
+# Consecutive failed updates before telling the user the data stopped coming.
+# Klereo runs a nightly maintenance window that costs a single cycle and heals
+# itself, so notifying on the first failure would fire almost every night.
+FAILURE_NOTIFY_THRESHOLD = 2
+
+NOTIFICATION_ID_LOST = "klereo_connection_lost"
+NOTIFICATION_ID_RESTORED = "klereo_connection_restored"
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def _format_duration(delta: timedelta) -> str:
+    """Render an outage length the way a person would say it."""
+    minutes = max(0, int(delta.total_seconds() // 60))
+    if minutes < 60:
+        return f"{minutes} min"
+    hours, minutes = divmod(minutes, 60)
+    if hours < 24:
+        return f"{hours} h {minutes:02d}"
+    days, hours = divmod(hours, 24)
+    return f"{days} j {hours} h"
 
 
 class KlereoDataUpdateCoordinator(DataUpdateCoordinator):
@@ -32,6 +51,10 @@ class KlereoDataUpdateCoordinator(DataUpdateCoordinator):
         self._previous_alert_count: dict[int, int] = {}
         self._absent_device_count: dict[str, int] = {}
         self._consecutive_auth_failures = 0
+        self._consecutive_failures = 0
+        self._unavailable_since: datetime | None = None
+        self._loss_notified = False
+        self._had_success = False
 
     def _raise_auth_rejection(self, err: Exception, reason: str) -> None:
         """Escalate a rejected session, but only once it proves persistent.
@@ -63,6 +86,83 @@ class KlereoDataUpdateCoordinator(DataUpdateCoordinator):
         raise ConfigEntryAuthFailed(f"Klereo session rejected ({reason})") from err
 
     async def _async_update_data(self):
+        """Fetch data, tracking availability transitions for the user.
+
+        The fetch itself lives in _async_fetch_data, which raises from five
+        different places; wrapping it gives a single point to notice that the
+        data stopped -- and started again -- without instrumenting each one.
+        """
+        try:
+            data = await self._async_fetch_data()
+        except Exception as err:
+            await self._handle_unavailable(err)
+            raise
+        await self._handle_available()
+        return data
+
+    async def _handle_unavailable(self, err: Exception) -> None:
+        """Notify once the data has been missing for long enough to matter."""
+        self._consecutive_failures += 1
+        if self._unavailable_since is None:
+            self._unavailable_since = dt_util.now()
+
+        if not self._had_success:
+            # A failure on the very first refresh is already surfaced by HA as
+            # ConfigEntryNotReady; a notification on top would just be noise.
+            return
+        if self._loss_notified or self._consecutive_failures < FAILURE_NOTIFY_THRESHOLD:
+            return
+
+        self._loss_notified = True
+        message = (
+            "Les donnees de la piscine ne remontent plus.\n"
+            f"Cause : {err}\n\n"
+            "L'integration continue d'essayer de se reconnecter."
+        )
+        _LOGGER.warning("Klereo data unavailable for %d cycles: %s", self._consecutive_failures, err)
+        await self._notify(
+            "create",
+            {"title": "Klereo - Donnees indisponibles", "message": message,
+             "notification_id": NOTIFICATION_ID_LOST},
+        )
+
+    async def _handle_available(self) -> None:
+        """Close the outage and report how long it lasted."""
+        self._had_success = True
+        was_notified = self._loss_notified
+        started_at = self._unavailable_since
+        self._consecutive_failures = 0
+        self._unavailable_since = None
+        self._loss_notified = False
+
+        if not was_notified:
+            return
+
+        duration = _format_duration(dt_util.now() - started_at) if started_at else None
+        message = "Les donnees de la piscine remontent a nouveau."
+        if duration:
+            message += f"\nInterruption : {duration}."
+        _LOGGER.info("Klereo data available again (outage: %s)", duration or "unknown")
+
+        await self._notify("dismiss", {"notification_id": NOTIFICATION_ID_LOST})
+        await self._notify(
+            "create",
+            {"title": "Klereo - Connexion retablie", "message": message,
+             "notification_id": NOTIFICATION_ID_RESTORED},
+        )
+
+    async def _notify(self, service: str, payload: dict) -> None:
+        """Call persistent_notification without ever masking the real error.
+
+        _handle_unavailable runs inside an `except` block: an exception raised
+        here would replace the fetch failure the caller is about to re-raise.
+        """
+        try:
+            await self.hass.services.async_call("persistent_notification", service, payload)
+        except Exception:  # noqa: BLE001 - notifications are never worth a crash
+            _LOGGER.debug("persistent_notification.%s failed", service, exc_info=True)
+
+    async def _async_fetch_data(self):
         """Fetch data from the API."""
         try:
             _LOGGER.debug("Updating Klereo data.")
